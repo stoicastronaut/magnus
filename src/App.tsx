@@ -32,6 +32,16 @@ function App() {
     }
   }
 
+  async function handleTestConnection() {
+    setStatus("Testing...");
+    try {
+      const result = await invoke<string>("test_connection", { apiKey, baseUrl });
+      setStatus(result);
+    } catch (err) {
+      setStatus(`Error: ${err}`);
+    }
+  }
+
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 500 }}>
       <h1>Magnus Settings</h1>
@@ -56,6 +66,7 @@ function App() {
           />
         </label>
         <button type="submit">Save</button>
+        <button type="button" onClick={handleTestConnection}>Test Connection</button>
         {status && <p>{status}</p>}
       </form>
     </main>
