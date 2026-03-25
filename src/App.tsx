@@ -1,49 +1,63 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+
+interface Settings {
+  api_key: string;
+  base_url: string;
+}
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("https://api.anthropic.com");
+  const [status, setStatus] = useState("");
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    invoke<Settings>("get_settings")
+      .then((s) => {
+        setApiKey(s.api_key);
+        setBaseUrl(s.base_url);
+      })
+      .catch(() => {
+        // No settings file yet, defaults are fine
+      });
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await invoke("save_settings", { apiKey, baseUrl });
+      setStatus("Settings saved.");
+    } catch (err) {
+      setStatus(`Error: ${err}`);
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
+    <main style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 500 }}>
+      <h1>Magnus Settings</h1>
+      <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <label>
+          API Key
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-ant-..."
+            style={{ display: "block", width: "100%", marginTop: 4 }}
+          />
+        </label>
+        <label>
+          Base URL
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            style={{ display: "block", width: "100%", marginTop: 4 }}
+          />
+        </label>
+        <button type="submit">Save</button>
+        {status && <p>{status}</p>}
       </form>
-      <p>{greetMsg}</p>
     </main>
   );
 }
