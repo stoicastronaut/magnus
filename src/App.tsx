@@ -1,76 +1,16 @@
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
+import { HomePage } from "./components/HomePage";
+import { SettingsPage } from "./components/SettingsPage";
 
-interface Settings {
-  api_key: string;
-  base_url: string;
-}
+type View = "home" | "settings";
 
 function App() {
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("https://api.anthropic.com");
-  const [status, setStatus] = useState("");
+  const [view, setView] = useState<View>("home");
 
-  useEffect(() => {
-    invoke<Settings>("get_settings")
-      .then((s) => {
-        setApiKey(s.api_key);
-        setBaseUrl(s.base_url);
-      })
-      .catch(() => {
-        // No settings file yet, defaults are fine
-      });
-  }, []);
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await invoke("save_settings", { apiKey, baseUrl });
-      setStatus("Settings saved.");
-    } catch (err) {
-      setStatus(`Error: ${err}`);
-    }
+  if (view === "settings") {
+    return <SettingsPage onBack={() => setView("home")} />;
   }
-
-  async function handleTestConnection() {
-    setStatus("Testing...");
-    try {
-      const result = await invoke<string>("test_connection", { apiKey, baseUrl });
-      setStatus(result);
-    } catch (err) {
-      setStatus(`Error: ${err}`);
-    }
-  }
-
-  return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 500 }}>
-      <h1>Magnus Settings</h1>
-      <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <label>
-          API Key
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-..."
-            style={{ display: "block", width: "100%", marginTop: 4 }}
-          />
-        </label>
-        <label>
-          Base URL
-          <input
-            type="text"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
-          />
-        </label>
-        <button type="submit">Save</button>
-        <button type="button" onClick={handleTestConnection}>Test Connection</button>
-        {status && <p>{status}</p>}
-      </form>
-    </main>
-  );
+  return <HomePage onSettings={() => setView("settings")} />;
 }
 
 export default App;
