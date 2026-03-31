@@ -35,6 +35,11 @@ async fn send_message(api_key: String, base_url: String, messages: Vec<Message>)
     claude::send_message(&api_key, &base_url, &messages).await
 }
 
+#[tauri::command]
+async fn stream_message(app: tauri::AppHandle, api_key: String, base_url: String, messages: Vec<Message>) -> Result<(), String> {
+    claude::stream_message(app, &api_key, &base_url, &messages).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -44,6 +49,7 @@ pub fn run() {
             get_settings,
             save_settings,
             send_message,
+            stream_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
