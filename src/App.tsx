@@ -7,10 +7,14 @@ type View = "home" | "settings";
 function App() {
   const [view, setView] = useState<View>("home");
 
-  if (view === "settings") {
-    return <SettingsPage onBack={() => setView("home")} />;
-  }
-  return <HomePage onSettings={() => setView("settings")} />;
+  return (
+    <>
+      <div style={{ display: view === "home" ? "contents" : "none" }}>
+        <HomePage onSettings={() => setView("settings")} />
+      </div>
+      {view === "settings" && <SettingsPage onBack={() => setView("home")} />}
+    </>
+  );
 }
 
 export default App;

@@ -1,25 +1,114 @@
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Sidebar, Chat } from "./Sidebar";
+import { ChatArea } from "./ChatArea";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Settings {
+  api_key: string;
+  base_url: string;
+}
+
 interface HomePageProps {
   onSettings: () => void;
 }
 
 export function HomePage({ onSettings }: HomePageProps) {
+  const [chats, setChats] = useState<Chat[]>([{ id: 1, name: "Chat #1", messages: [] }]);
+  const [activeChatId, setActiveChatId] = useState(1);
+  const [nextId, setNextId] = useState(2);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  const activeChat = chats.find((c) => c.id === activeChatId)!;
+
+  useEffect(() => {
+    invoke<Settings>("get_settings")
+      .then(setSettings)
+      .catch(() => {});
+  }, []);
+
+  function handleNewChat() {
+    const newChat: Chat = { id: nextId, name: `Chat #${nextId}`, messages: [] };
+    setChats((prev) => [...prev, newChat]);
+    setActiveChatId(nextId);
+    setNextId((n) => n + 1);
+  }
+
+  function handleRename(id: number, name: string) {
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, name } : c));
+  }
+
+  async function handleSend() {
+    if (!input.trim() || loading || !settings) return;
+
+    const newMessages: Message[] = [
+      ...activeChat.messages,
+      { role: "user", content: input },
+    ];
+
+    setChats((prev) => prev.map((c) => c.id === activeChatId ? { ...c, messages: newMessages } : c));
+    setInput("");
+    setLoading(true);
+
+    const assistantIndex = newMessages.length;
+    setChats((prev) => prev.map((c) => c.id === activeChatId ? { ...c, messages: [...newMessages, { role: "assistant", content: "" }] } : c));
+
+    let accumulated = "";
+
+    const unlisten = await listen<string>("stream-token", (event) => {
+      accumulated += event.payload;
+      setChats((prev) => prev.map((c) => {
+        if (c.id !== activeChatId) return c;
+        const updated = [...c.messages];
+        updated[assistantIndex] = { role: "assistant", content: accumulated };
+        return { ...c, messages: updated };
+      }));
+    });
+
+    try {
+      await invoke("stream_message", {
+        apiKey: settings.api_key,
+        baseUrl: settings.base_url,
+        messages: newMessages,
+      });
+    } catch (err) {
+      setChats((prev) => prev.map((c) => {
+        if (c.id !== activeChatId) return c;
+        const updated = [...c.messages];
+        updated[assistantIndex] = { role: "assistant", content: `Error: ${err}` };
+        return { ...c, messages: updated };
+      }));
+    } finally {
+      unlisten();
+      setLoading(false);
+    }
+  }
+
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif", height: "100vh", boxSizing: "border-box" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button
-          onClick={onSettings}
-          title="Settings"
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "80%" }}>
-        <h1>Welcome to Magnus</h1>
-      </div>
+    <main style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
+      <Sidebar
+        chats={chats}
+        activeChatId={activeChatId}
+        onSelectChat={setActiveChatId}
+        onNewChat={handleNewChat}
+        onRename={handleRename}
+        onSettings={onSettings}
+      />
+      <ChatArea
+        messages={activeChat.messages}
+        loading={loading}
+        input={input}
+        hasSettings={!!settings}
+        onInputChange={setInput}
+        onSend={handleSend}
+      />
     </main>
   );
 }
