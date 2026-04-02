@@ -31,7 +31,7 @@ An open-source Claude desktop application built with Tauri (Rust + React) that s
 
 ## Architecture Principles
 
-### Rust Backend (src-tauri/)
+### Rust Backend (backend/)
 - All Claude API calls go through Rust using `reqwest` — this is what enables proxy support
 - Tauri commands (`#[tauri::command]`) are the public interface exposed to the frontend
 - Keep commands thin: they receive input, call a service, return output
@@ -139,7 +139,7 @@ src/
 │   ├── ChatArea.tsx            # Messages display + input
 │   └── SettingsPage.tsx        # API key + base URL form
 
-src-tauri/src/
+backend/src/
 ├── main.rs                     # Entry point — calls lib::run()
 ├── lib.rs                      # Tauri command registration
 ├── config.rs                   # Settings struct, save/load to disk
@@ -157,7 +157,7 @@ magnus/
 │   ├── stores/                 # State management
 │   ├── App.tsx
 │   └── main.tsx
-├── src-tauri/                  # Rust backend
+├── backend/                  # Rust backend
 │   ├── src/
 │   │   ├── main.rs             # Tauri app setup only
 │   │   ├── lib.rs              # Command registration

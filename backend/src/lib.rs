@@ -1,9 +1,9 @@
 use tauri::Manager;
-use claude::Message;
+use llm::Message;
 use chats::Chat;
 use std::fs;
 mod config;
-mod claude;
+mod llm;
 mod chats;
 
 #[tauri::command]
@@ -29,7 +29,7 @@ fn save_settings(app: tauri::AppHandle, api_key: String, base_url: String) -> Re
 
 #[tauri::command]
 async fn stream_message(app: tauri::AppHandle, api_key: String, base_url: String, messages: Vec<Message>) -> Result<(), String> {
-    claude::stream_message(app, &api_key, &base_url, &messages).await
+    llm::stream_message(app, &api_key, &base_url, &messages).await
 }
 
 #[tauri::command]
