@@ -98,6 +98,8 @@ export function HomePage({ onSettings }: HomePageProps) {
   async function handleSend() {
     if (!input.trim() || loading || !settings || !activeChat) return;
 
+    const isFirstMessage = activeChat.messages.length === 0;
+
     const newMessages: Message[] = [
       ...activeChat.messages,
       { role: "user", content: input },
@@ -134,6 +136,16 @@ export function HomePage({ onSettings }: HomePageProps) {
         if (chat) invoke("save_chat", { chat }).catch(() => {});
         return prev;
       });
+
+      if (isFirstMessage) {
+        invoke<string>("rename_chat", {
+          apiKey: settings.api_key,
+          baseUrl: settings.base_url,
+          chat: { ...activeChat, messages: newMessages },
+        }).then((name) => {
+          setChats((prev) => prev.map((c) => c.id === activeChatId ? { ...c, name } : c));
+        }).catch(() => {});
+      }
     } catch (err) {
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
