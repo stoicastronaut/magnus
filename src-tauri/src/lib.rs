@@ -1,13 +1,10 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use tauri::Manager;
 use claude::Message;
+use chats::Chat;
+use std::fs;
 mod config;
 mod claude;
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+mod chats;
 
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
@@ -31,13 +28,43 @@ fn save_settings(app: tauri::AppHandle, api_key: String, base_url: String) -> Re
 }
 
 #[tauri::command]
-async fn send_message(api_key: String, base_url: String, messages: Vec<Message>) -> Result<String, String> {
-    claude::send_message(&api_key, &base_url, &messages).await
+async fn stream_message(app: tauri::AppHandle, api_key: String, base_url: String, messages: Vec<Message>) -> Result<(), String> {
+    claude::stream_message(app, &api_key, &base_url, &messages).await
 }
 
 #[tauri::command]
-async fn stream_message(app: tauri::AppHandle, api_key: String, base_url: String, messages: Vec<Message>) -> Result<(), String> {
-    claude::stream_message(app, &api_key, &base_url, &messages).await
+fn save_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
+    let chats_dir = app.path().app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("chats");
+    chat.save(&chats_dir)
+}
+
+#[tauri::command]
+fn load_chats(app: tauri::AppHandle) -> Result<Vec<Chat>, String> {
+    let chats_dir = app.path().app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("chats");
+
+    if !chats_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut chats = vec![];
+    for entry in fs::read_dir(&chats_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let chat = Chat::load(&entry.path())?;
+        chats.push(chat);
+    }
+    Ok(chats)
+}
+
+#[tauri::command]
+fn delete_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
+    let chats_dir = app.path().app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("chats");
+    chat.delete(&chats_dir)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,11 +72,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             get_settings,
             save_settings,
-            send_message,
             stream_message,
+            save_chat,
+            load_chats,
+            delete_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
