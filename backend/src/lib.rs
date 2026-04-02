@@ -1,5 +1,5 @@
 use chats::Chat;
-use llm::Message;
+use chats::Message;
 use std::fs;
 use tauri::Manager;
 mod chats;
@@ -34,13 +34,35 @@ async fn stream_message(
 }
 
 #[tauri::command]
-fn save_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
+async fn save_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
     let chats_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("chats");
     chat.save(&chats_dir)
+}
+
+#[tauri::command]
+async fn rename_chat(
+    app: tauri::AppHandle,
+    api_key: String,
+    base_url: String,
+    chat: Chat,
+) -> Result<String, String> {
+    let chats_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("chats");
+    let message = &chat.messages[0];
+    let chat_name = llm::change_chat_name(&api_key, &base_url, message).await?;
+    let updated_chat = Chat {
+        name: chat_name.clone(),
+        ..chat
+    };
+    updated_chat.save(&chats_dir)?;
+    Ok(chat_name)
 }
 
 #[tauri::command]
@@ -83,6 +105,7 @@ pub fn run() {
             save_settings,
             stream_message,
             save_chat,
+            rename_chat,
             load_chats,
             delete_chat,
         ])
