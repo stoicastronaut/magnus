@@ -1,14 +1,19 @@
-use serde::{Serialize, Deserialize};
 use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub role: String,
-    pub content: String
+    pub content: String,
 }
 
-pub async fn stream_message(app: tauri::AppHandle, api_key: &str, base_url: &str, messages: &[Message]) -> Result<(), String> {
+pub async fn stream_message(
+    app: tauri::AppHandle,
+    api_key: &str,
+    base_url: &str,
+    messages: &[Message],
+) -> Result<(), String> {
     let client = reqwest::Client::new();
 
     let body = serde_json::json!({
@@ -39,12 +44,13 @@ pub async fn stream_message(app: tauri::AppHandle, api_key: &str, base_url: &str
                 continue;
             }
 
-            let Ok(json) =
-                serde_json::from_str::<serde_json::Value>(line.trim_start_matches("data: ")) else {
-                    continue;
+            let Ok(json) = serde_json::from_str::<serde_json::Value>(
+                line.trim_start_matches("data: "),
+            ) else {
+                continue;
             };
             if json["type"] != "content_block_delta" {
-                continue
+                continue;
             }
             let token = json["delta"]["text"].as_str().unwrap_or("");
             if !token.is_empty() {
