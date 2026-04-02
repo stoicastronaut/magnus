@@ -38,10 +38,10 @@ An open-source Claude desktop application built with Tauri (Rust + React) that s
 - Business logic lives in modules, not in `main.rs` or `lib.rs` directly
 - Use `thiserror` for typed errors, `anyhow` for internal error chaining
 
-### React Frontend (src/)
+### React Frontend (frontend/)
 - Frontend is purely a UI layer — it never calls Claude API directly
 - Communicate with Rust via `@tauri-apps/api/core` `invoke()` calls
-- Keep Tauri-specific code in a dedicated service/adapter layer (e.g., `src/services/tauri.ts`)
+- Keep Tauri-specific code in a dedicated service/adapter layer (e.g., `frontend/services/tauri.ts`)
   so the UI components stay portable and testable
 - Prefer small, focused components
 
@@ -121,7 +121,7 @@ pnpm tsc --noEmit
 - **Proxy**: Works by setting a custom `base_url` in settings (e.g. `https://llm-proxy.edgez.live/`) — the Anthropic SDK convention of appending `v1/messages` to the base URL is followed
 
 ### Known Issues / Limitations
-- Model is hardcoded to `claude-haiku-4-5-20251001` in `claude.rs`
+- Model is hardcoded to `claude-haiku-4-5-20251001` in `llm.rs`
 - No system prompt support yet
 - No proxy authentication support (HTTP/HTTPS proxy via reqwest not yet implemented)
 
@@ -131,7 +131,7 @@ The proxy used in development is `https://llm-proxy.edgez.live/` — it follows 
 ## Current File Structure
 
 ```
-src/
+frontend/
 ├── App.tsx                     # Routing — keeps HomePage always mounted to preserve state
 ├── components/
 │   ├── HomePage.tsx            # State orchestration for chat sessions
@@ -151,7 +151,7 @@ backend/src/
 
 ```
 magnus/
-├── src/                        # React frontend
+├── frontend/                   # React frontend
 │   ├── components/             # UI components
 │   ├── services/               # Tauri invoke wrappers
 │   ├── stores/                 # State management
