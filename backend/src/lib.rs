@@ -1,40 +1,43 @@
-use tauri::Manager;
-use llm::Message;
 use chats::Chat;
+use llm::Message;
 use std::fs;
+use tauri::Manager;
+mod chats;
 mod config;
 mod llm;
-mod chats;
 
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
-    let path = app.path().app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("settings.json");
-    config::Settings::load(&path)
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    config::Settings::load(&app_data_dir)
 }
 
 #[tauri::command]
-fn save_settings(app: tauri::AppHandle, api_key: String, base_url: String) -> Result<(), String> {
-    let path = app.path().app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("settings.json");
-    let settings = config::Settings{
-        api_key: api_key,
-        base_url: base_url,
-    };
-    settings.save(&path)?;
-    Ok(())
+fn save_settings(
+    app: tauri::AppHandle,
+    api_key: String,
+    base_url: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let settings = config::Settings { api_key, base_url };
+    settings.save(&app_data_dir)
 }
 
 #[tauri::command]
-async fn stream_message(app: tauri::AppHandle, api_key: String, base_url: String, messages: Vec<Message>) -> Result<(), String> {
+async fn stream_message(
+    app: tauri::AppHandle,
+    api_key: String,
+    base_url: String,
+    messages: Vec<Message>,
+) -> Result<(), String> {
     llm::stream_message(app, &api_key, &base_url, &messages).await
 }
 
 #[tauri::command]
 fn save_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
-    let chats_dir = app.path().app_data_dir()
+    let chats_dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("chats");
     chat.save(&chats_dir)
@@ -42,7 +45,9 @@ fn save_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
 
 #[tauri::command]
 fn load_chats(app: tauri::AppHandle) -> Result<Vec<Chat>, String> {
-    let chats_dir = app.path().app_data_dir()
+    let chats_dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("chats");
 
@@ -61,7 +66,9 @@ fn load_chats(app: tauri::AppHandle) -> Result<Vec<Chat>, String> {
 
 #[tauri::command]
 fn delete_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
-    let chats_dir = app.path().app_data_dir()
+    let chats_dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("chats");
     chat.delete(&chats_dir)
