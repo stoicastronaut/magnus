@@ -8,12 +8,8 @@ mod llm;
 
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
-    let path = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("settings.json");
-    config::Settings::load(&path)
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    config::Settings::load(&app_data_dir)
 }
 
 #[tauri::command]
@@ -22,14 +18,9 @@ fn save_settings(
     api_key: String,
     base_url: String,
 ) -> Result<(), String> {
-    let path = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("settings.json");
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let settings = config::Settings { api_key, base_url };
-    settings.save(&path)?;
-    Ok(())
+    settings.save(&app_data_dir)
 }
 
 #[tauri::command]
