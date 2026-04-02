@@ -49,8 +49,27 @@ export function ChatArea({ messages, loading, input, hasSettings, onInputChange,
         })}
         {loading && (
           <div style={{ display: "flex", justifyContent: "flex-start" }}>
-            <div style={{ padding: "0.6rem 0.9rem", borderRadius: 12, background: "#f0f0f0", color: "#999" }}>
-              ...
+            <div style={{ padding: "0.6rem 0.9rem", borderRadius: 12, background: "#f0f0f0", display: "flex", gap: 4, alignItems: "center" }}>
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#999",
+                    display: "inline-block",
+                    animation: "bounce 1.2s infinite",
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                />
+              ))}
+              <style>{`
+                @keyframes bounce {
+                  0%, 60%, 100% { transform: translateY(0); }
+                  30% { transform: translateY(-6px); }
+                }
+              `}</style>
             </div>
           </div>
         )}
