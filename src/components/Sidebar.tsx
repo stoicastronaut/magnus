@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Message {
   role: "user" | "assistant";
@@ -6,17 +6,25 @@ interface Message {
 }
 
 export interface Chat {
-  id: number;
+  id: string;
   name: string;
   messages: Message[];
+  created_at: string;
+}
+
+interface ContextMenu {
+  chatId: string;
+  x: number;
+  y: number;
 }
 
 interface SidebarProps {
   chats: Chat[];
-  activeChatId: number;
-  onSelectChat: (id: number) => void;
+  activeChatId: string;
+  onSelectChat: (id: string) => void;
   onNewChat: () => void;
-  onRename: (id: number, name: string) => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (chat: Chat) => void;
   onSettings: () => void;
 }
 
@@ -27,22 +35,46 @@ const GearIcon = () => (
   </svg>
 );
 
-export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename, onSettings }: SidebarProps) {
-  const [renamingChatId, setRenamingChatId] = useState<number | null>(null);
+export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename, onDelete, onSettings }: SidebarProps) {
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   function handleRightClick(e: React.MouseEvent, chat: Chat) {
     e.preventDefault();
+    setContextMenu({ chatId: chat.id, x: e.clientX, y: e.clientY });
+  }
+
+  function handleRenameClick(chat: Chat) {
+    setContextMenu(null);
     setRenamingChatId(chat.id);
     setRenameValue(chat.name);
   }
 
-  function commitRename(id: number) {
+  function handleDeleteClick(chat: Chat) {
+    setContextMenu(null);
+    onDelete(chat);
+  }
+
+  function commitRename(id: string) {
     if (renameValue.trim()) {
       onRename(id, renameValue.trim());
     }
     setRenamingChatId(null);
   }
+
+  const contextMenuChat = contextMenu ? chats.find((c) => c.id === contextMenu.chatId) : null;
 
   return (
     <div style={{ width: 240, display: "flex", flexDirection: "column", borderRight: "1px solid #eee", background: "#fafafa" }}>
@@ -109,6 +141,38 @@ export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename
           <GearIcon /> Settings
         </button>
       </div>
+
+      {/* Context menu */}
+      {contextMenu && contextMenuChat && (
+        <div
+          ref={contextMenuRef}
+          style={{
+            position: "fixed",
+            top: contextMenu.y,
+            left: contextMenu.x,
+            background: "#fff",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+            zIndex: 1000,
+            overflow: "hidden",
+            minWidth: 120,
+          }}
+        >
+          <button
+            onClick={() => handleRenameClick(contextMenuChat)}
+            style={{ display: "block", width: "100%", padding: "0.5rem 1rem", background: "none", border: "none", textAlign: "left", cursor: "pointer", fontSize: 14 }}
+          >
+            Rename
+          </button>
+          <button
+            onClick={() => handleDeleteClick(contextMenuChat)}
+            style={{ display: "block", width: "100%", padding: "0.5rem 1rem", background: "none", border: "none", textAlign: "left", cursor: "pointer", fontSize: 14, color: "#e53e3e" }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

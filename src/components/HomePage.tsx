@@ -18,35 +18,85 @@ interface HomePageProps {
   onSettings: () => void;
 }
 
+function formatDate(): string {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yy = String(now.getFullYear()).slice(2);
+  return `${dd}-${mm}-${yy}`;
+}
+
+function newChat(): Chat {
+  return {
+    id: crypto.randomUUID(),
+    name: "New Chat",
+    messages: [],
+    created_at: formatDate(),
+  };
+}
+
 export function HomePage({ onSettings }: HomePageProps) {
-  const [chats, setChats] = useState<Chat[]>([{ id: 1, name: "Chat #1", messages: [] }]);
-  const [activeChatId, setActiveChatId] = useState(1);
-  const [nextId, setNextId] = useState(2);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
 
-  const activeChat = chats.find((c) => c.id === activeChatId)!;
+  const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
 
   useEffect(() => {
     invoke<Settings>("get_settings")
       .then(setSettings)
       .catch(() => {});
+
+    invoke<Chat[]>("load_chats")
+      .then((loaded) => {
+        if (loaded.length === 0) {
+          const initial = newChat();
+          setChats([initial]);
+          setActiveChatId(initial.id);
+          invoke("save_chat", { chat: initial }).catch(() => {});
+        } else {
+          setChats(loaded);
+          setActiveChatId(loaded[0].id);
+        }
+      })
+      .catch(() => {
+        const initial = newChat();
+        setChats([initial]);
+        setActiveChatId(initial.id);
+      });
   }, []);
 
   function handleNewChat() {
-    const newChat: Chat = { id: nextId, name: `Chat #${nextId}`, messages: [] };
-    setChats((prev) => [...prev, newChat]);
-    setActiveChatId(nextId);
-    setNextId((n) => n + 1);
+    const chat = newChat();
+    setChats((prev) => [...prev, chat]);
+    setActiveChatId(chat.id);
+    invoke("save_chat", { chat }).catch(() => {});
   }
 
-  function handleRename(id: number, name: string) {
-    setChats((prev) => prev.map((c) => c.id === id ? { ...c, name } : c));
+  function handleRename(id: string, name: string) {
+    setChats((prev) => {
+      const updated = prev.map((c) => c.id === id ? { ...c, name } : c);
+      const chat = updated.find((c) => c.id === id);
+      if (chat) invoke("save_chat", { chat }).catch(() => {});
+      return updated;
+    });
+  }
+
+  function handleDelete(chat: Chat) {
+    setChats((prev) => {
+      const remaining = prev.filter((c) => c.id !== chat.id);
+      if (activeChatId === chat.id) {
+        setActiveChatId(remaining.length > 0 ? remaining[0].id : null);
+      }
+      return remaining;
+    });
+    invoke("delete_chat", { chat }).catch(() => {});
   }
 
   async function handleSend() {
-    if (!input.trim() || loading || !settings) return;
+    if (!input.trim() || loading || !settings || !activeChat) return;
 
     const newMessages: Message[] = [
       ...activeChat.messages,
@@ -78,6 +128,12 @@ export function HomePage({ onSettings }: HomePageProps) {
         baseUrl: settings.base_url,
         messages: newMessages,
       });
+
+      setChats((prev) => {
+        const chat = prev.find((c) => c.id === activeChatId);
+        if (chat) invoke("save_chat", { chat }).catch(() => {});
+        return prev;
+      });
     } catch (err) {
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
@@ -95,14 +151,15 @@ export function HomePage({ onSettings }: HomePageProps) {
     <main style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
       <Sidebar
         chats={chats}
-        activeChatId={activeChatId}
+        activeChatId={activeChatId ?? ""}
         onSelectChat={setActiveChatId}
         onNewChat={handleNewChat}
         onRename={handleRename}
+        onDelete={handleDelete}
         onSettings={onSettings}
       />
       <ChatArea
-        messages={activeChat.messages}
+        messages={activeChat?.messages ?? []}
         loading={loading}
         input={input}
         hasSettings={!!settings}
