@@ -110,17 +110,17 @@ pnpm tsc --noEmit
 > Note: `pnpm tauri dev` has native binding issues on this machine. Always use `cargo tauri dev` instead.
 > Tauri CLI installed via: `cargo install tauri-cli --version "^2.0.0" --locked`
 
-## Current State (as of end of session 2)
+## Current State (as of end of session 3)
 
 ### What's implemented
 - **Settings**: API key + base URL saved to disk as JSON (`~/Library/Application Support/com.magnus.app/settings.json`)
 - **Chat**: Streaming chat via SSE, full conversation history sent on each request
-- **Sidebar**: Left navbar with chat list, new chat button, right-click rename, settings button at bottom
-- **Multi-chat**: Multiple independent chat sessions (in-memory only, not persisted yet)
+- **Sidebar**: Left navbar with chat list, new chat button, right-click context menu (rename/delete), settings button at bottom
+- **Multi-chat**: Multiple independent chat sessions, persisted to disk
+- **Chat persistence**: Each chat saved as `{app_data_dir}/chats/{dd-mm-yy}-{uuid}.json`, loaded on startup
 - **Proxy**: Works by setting a custom `base_url` in settings (e.g. `https://llm-proxy.edgez.live/`) — the Anthropic SDK convention of appending `v1/messages` to the base URL is followed
 
 ### Known Issues / Limitations
-- Chat sessions are lost on app restart (not persisted to disk)
 - Model is hardcoded to `claude-haiku-4-5-20251001` in `claude.rs`
 - No system prompt support yet
 - No proxy authentication support (HTTP/HTTPS proxy via reqwest not yet implemented)
@@ -143,7 +143,8 @@ src-tauri/src/
 ├── main.rs                     # Entry point — calls lib::run()
 ├── lib.rs                      # Tauri command registration
 ├── config.rs                   # Settings struct, save/load to disk
-└── claude.rs                   # Message struct, send_message, stream_message
+├── claude.rs                   # Message struct, stream_message
+└── chats.rs                    # Chat struct, save/load/delete per-file
 ```
 
 ## Future Features
@@ -172,36 +173,30 @@ magnus/
 
 The following features are planned but not yet implemented:
 
-### 1. Persist Chats
-Save chat sessions (name + message history) to disk so they survive app restarts.
-- Add a `Chat` struct and `Vec<Chat>` persistence in Rust (similar to `config.rs`)
-- Call `save_chats` from frontend on every state change
-- Call `load_chats` on app startup
-
-### 2. Multiple Models and Providers
+### 1. Multiple Models and Providers
 Allow users to select the model per chat or globally.
 - Add `model: String` to `Settings` (or per-chat config)
 - Expose a model selector in the UI
 - Support non-Anthropic providers (OpenAI-compatible APIs) by making the request format configurable
 
-### 3. Multi-Agent Mode
+### 2. Multi-Agent Mode
 Run multiple Claude agents concurrently with shared or independent context.
 - Each agent has its own conversation thread and possibly a system prompt
 - Agents can be orchestrated (one agent spawns sub-agents)
 - UI: agent panel showing active agents and their status
 
-### 4. Computer Task Manipulation
+### 3. Computer Task Manipulation
 Allow Claude to interact with the local filesystem (move, copy, create, delete files).
 - Expose Tauri commands for filesystem operations with permission prompts
 - Connect to Claude's tool_use API feature
 - Security: strict permission model, user must approve each action type
 
-### 5. Automatic Chat Naming
+### 4. Automatic Chat Naming
 Auto-generate a meaningful chat name based on the first message + response.
 - After the first assistant response, invoke a secondary Claude call with a short prompt: "Summarize this conversation in 4 words"
 - Update the chat name in the sidebar automatically
 
-### 6. MCP (Model Context Protocol) Connection
+### 5. MCP (Model Context Protocol) Connection
 Allow Magnus to connect to MCP servers, giving Claude access to external tools and data sources.
 - Implement MCP client in Rust
 - UI for adding/managing MCP server connections
