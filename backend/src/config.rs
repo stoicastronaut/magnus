@@ -1,6 +1,6 @@
-use serde::{Serialize, Deserialize};
-use std::path::Path;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -12,7 +12,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             api_key: String::new(),
-            base_url: "https://api.anthropic.com".to_string()
+            base_url: "https://api.anthropic.com".to_string(),
         }
     }
 }
@@ -22,14 +22,16 @@ impl Settings {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let str_pretty = serde_json::to_string_pretty(&self).map_err(|e| e.to_string())?;
+        let str_pretty =
+            serde_json::to_string_pretty(&self).map_err(|e| e.to_string())?;
         fs::write(path, str_pretty).map_err(|e| e.to_string())?;
         Ok(())
     }
 
     pub fn load(path: &Path) -> Result<Settings, String> {
         let json_str = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        let json_pretty = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+        let json_pretty =
+            serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
         Ok(json_pretty)
     }
 }
