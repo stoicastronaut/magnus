@@ -5,6 +5,7 @@ use tauri::Manager;
 mod chats;
 mod config;
 mod llm;
+mod mcp;
 
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
@@ -21,6 +22,12 @@ fn save_settings(
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let settings = config::Settings { api_key, base_url };
     settings.save(&app_data_dir)
+}
+
+#[tauri::command]
+async fn test_mcp_connection() -> Result<(), String> {
+    mcp::connect().await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -108,6 +115,7 @@ pub fn run() {
             rename_chat,
             load_chats,
             delete_chat,
+            test_mcp_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
