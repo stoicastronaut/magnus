@@ -61,6 +61,30 @@ async fn execute_tool_call(
 }
 
 #[tauri::command]
+fn save_mcp_servers(app: tauri::AppHandle, servers: Vec<mcp::McpServer>) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    mcp::save_servers(&app_data_dir, &servers)
+}
+
+#[tauri::command]
+fn load_mcp_servers(app: tauri::AppHandle) -> Result<Vec<mcp::McpServer>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    mcp::load_servers(&app_data_dir)
+}
+
+#[tauri::command]
+async fn disconnect_server(pool: tauri::State<'_, mcp::McpPool>, server_name: String) -> Result<(), String> {
+    pool.connections.lock().await.remove(&server_name);
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_connected_servers(pool: tauri::State<'_, mcp::McpPool>) -> Result<Vec<String>, String> {
+    let names = pool.connections.lock().await.keys().cloned().collect();
+    Ok(names)
+}
+
+#[tauri::command]
 async fn stream_message(
     app: tauri::AppHandle,
     pool: tauri::State<'_, mcp::McpPool>,
@@ -218,6 +242,10 @@ pub fn run() {
             test_mcp_connection,
             list_tools,
             execute_tool_call,
+            save_mcp_servers,
+            load_mcp_servers,
+            disconnect_server,
+            get_connected_servers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
