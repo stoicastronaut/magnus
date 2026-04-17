@@ -1,7 +1,7 @@
 use chats::Chat;
 use chats::Message;
 use std::fs;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 mod chats;
 mod config;
 mod llm;
@@ -25,19 +25,116 @@ fn save_settings(
 }
 
 #[tauri::command]
-async fn test_mcp_connection() -> Result<(), String> {
+async fn test_mcp_connection(pool: tauri::State<'_, mcp::McpPool>) -> Result<(), String> {
     mcp::connect().await;
     Ok(())
 }
 
 #[tauri::command]
+async fn connect_server(pool: tauri::State<'_, mcp::McpPool>, server: mcp::McpServer) -> Result<(), String> {
+    let client = mcp::connect_server(&server).await.map_err(|e|
+        e.to_string())?;
+    pool.connections.lock().await.insert(server.name.clone(), client);
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_tools(pool: tauri::State<'_, mcp::McpPool>, server: mcp::McpServer) -> Result<Vec<rmcp::model::Tool>, String> {
+    let guard = pool.connections.lock().await;
+    let client = guard.get(&server.name).ok_or("Server not connected".to_string())?;
+    mcp::list_tools(&client).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn execute_tool_call(
+    pool: tauri::State<'_, mcp::McpPool>,
+    server_name: String,
+    tool_name: String,
+    arguments: serde_json::Value,
+) -> Result<String, String> {
+
+    let guard = pool.connections.lock().await;
+    let client = guard.get(&server_name).ok_or("Server not connected".to_string())?;
+    mcp::call_tool(client, &tool_name, arguments)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn stream_message(
     app: tauri::AppHandle,
+    pool: tauri::State<'_, mcp::McpPool>,
     api_key: String,
     base_url: String,
     messages: Vec<Message>,
 ) -> Result<(), String> {
-    llm::stream_message(app, &api_key, &base_url, &messages).await
+    let mut json_messages: Vec<serde_json::Value> = messages.iter().map(|m| serde_json::json!({
+        "role": m.role,
+        "content": [{"type": "text", "text": m.content}]
+    })).collect();
+
+    let tools: Vec<serde_json::Value> = {
+        let guard = pool.connections.lock().await;
+        let mut all_tools = Vec::new();
+        for client in guard.values() {
+            if let Ok(server_tools) = mcp::list_tools(client).await {
+                for tool in server_tools {
+                    all_tools.push(serde_json::json!({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.input_schema,
+                    }));
+                }
+            }
+        }
+        all_tools
+    };
+
+    loop {
+        let (assistant_blocks, tool_uses) = llm::stream_message(
+            &app,
+            &api_key,
+            &base_url,
+            &json_messages,
+            &tools,
+        ).await?;
+
+        json_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": assistant_blocks,
+        }));
+
+        if tool_uses.is_empty() {
+            break;
+        }
+
+        let guard = pool.connections.lock().await;
+        let mut tool_results = Vec::new();
+
+        for tool_use in &tool_uses {
+            app.emit("tool-call", serde_json::json!({ "name": tool_use.name })).unwrap();
+            let mut result_content = "Tool not found".to_string();
+            for client in guard.values() {
+                if let Ok(result) = mcp::call_tool(client, &tool_use.name, tool_use.input.clone()).await {
+                    result_content = result;
+                    break;
+                }
+            }
+            tool_results.push(serde_json::json!({
+                "type": "tool_result",
+                "tool_use_id": tool_use.id,
+                "content": result_content,
+            }));
+        }
+        drop(guard);
+
+        json_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -103,12 +200,15 @@ fn delete_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
     chat.delete(&chats_dir)
 }
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(mcp::McpPool::new())
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            connect_server,
             save_settings,
             stream_message,
             save_chat,
@@ -116,6 +216,8 @@ pub fn run() {
             load_chats,
             delete_chat,
             test_mcp_connection,
+            list_tools,
+            execute_tool_call,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
