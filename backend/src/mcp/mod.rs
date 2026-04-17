@@ -45,3 +45,57 @@ pub fn load_servers(app_data_dir: &Path) -> Result<Vec<McpServer>, String> {
     let json = fs::read_to_string(path).map_err(|e| e.to_string())?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn make_server(name: &str) -> McpServer {
+        McpServer {
+            name: name.to_string(),
+            display_name: name.to_string(),
+            command: "npx".to_string(),
+            args: vec!["-y".to_string(), "some-server".to_string()],
+            token: Some("tok".to_string()),
+            env_key: Some("MY_TOKEN".to_string()),
+        }
+    }
+
+    #[test]
+    fn test_save_creates_file() {
+        let dir = tempdir().unwrap();
+        save_servers(dir.path(), &[make_server("github")]).unwrap();
+        assert!(dir.path().join("mcp_servers.json").exists());
+    }
+
+    #[test]
+    fn test_load_returns_correct_servers() {
+        let dir = tempdir().unwrap();
+        let servers = vec![make_server("github"), make_server("linear")];
+        save_servers(dir.path(), &servers).unwrap();
+        let loaded = load_servers(dir.path()).unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].name, "github");
+        assert_eq!(loaded[1].name, "linear");
+    }
+
+    #[test]
+    fn test_load_returns_empty_when_file_missing() {
+        let dir = tempdir().unwrap();
+        let loaded = load_servers(dir.path()).unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn test_roundtrip_preserves_fields() {
+        let dir = tempdir().unwrap();
+        let server = make_server("github");
+        save_servers(dir.path(), &[server.clone()]).unwrap();
+        let loaded = load_servers(dir.path()).unwrap();
+        assert_eq!(loaded[0].command, "npx");
+        assert_eq!(loaded[0].args, vec!["-y", "some-server"]);
+        assert_eq!(loaded[0].token.as_deref(), Some("tok"));
+        assert_eq!(loaded[0].env_key.as_deref(), Some("MY_TOKEN"));
+    }
+}
