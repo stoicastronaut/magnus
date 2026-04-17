@@ -28,7 +28,10 @@ impl SseState {
     }
 
     /// Process one parsed SSE event. Returns a text token to emit if any.
-    pub fn process_event(&mut self, json: &serde_json::Value) -> Option<String> {
+    pub fn process_event(
+        &mut self,
+        json: &serde_json::Value,
+    ) -> Option<String> {
         match json["type"].as_str() {
             Some("content_block_start") => {
                 self.current_text.clear();
@@ -55,7 +58,8 @@ impl SseState {
                         None
                     }
                     Some("input_json_delta") => {
-                        let partial = delta["partial_json"].as_str().unwrap_or("");
+                        let partial =
+                            delta["partial_json"].as_str().unwrap_or("");
                         self.current_tool_input.push_str(partial);
                         None
                     }
@@ -72,8 +76,9 @@ impl SseState {
                 }
                 if !self.current_tool_input.is_empty() {
                     if let Some(tool) = self.tool_uses.last_mut() {
-                        tool.input = serde_json::from_str(&self.current_tool_input)
-                            .unwrap_or(serde_json::Value::Null);
+                        tool.input =
+                            serde_json::from_str(&self.current_tool_input)
+                                .unwrap_or(serde_json::Value::Null);
                         self.content_blocks.push(serde_json::json!({
                             "type": "tool_use",
                             "id": tool.id,
@@ -169,7 +174,8 @@ pub async fn stream_message(
             if data == "[DONE]" {
                 continue;
             }
-            let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else {
+            let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+            else {
                 continue;
             };
             if let Some(token) = state.process_event(&json) {
@@ -278,7 +284,8 @@ mod tests {
     #[test]
     fn test_unknown_event_type_ignored() {
         let mut state = SseState::new();
-        let result = state.process_event(&json!({"type": "message_start", "message": {}}));
+        let result = state
+            .process_event(&json!({"type": "message_start", "message": {}}));
         assert_eq!(result, None);
         assert!(state.content_blocks.is_empty());
     }
