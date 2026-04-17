@@ -25,24 +25,38 @@ fn save_settings(
 }
 
 #[tauri::command]
-async fn test_mcp_connection(pool: tauri::State<'_, mcp::McpPool>) -> Result<(), String> {
-    mcp::connect().await;
+async fn test_mcp_connection(
+    _pool: tauri::State<'_, mcp::McpPool>,
+) -> Result<(), String> {
+    let _ = mcp::connect().await;
     Ok(())
 }
 
 #[tauri::command]
-async fn connect_server(pool: tauri::State<'_, mcp::McpPool>, server: mcp::McpServer) -> Result<(), String> {
-    let client = mcp::connect_server(&server).await.map_err(|e|
-        e.to_string())?;
-    pool.connections.lock().await.insert(server.name.clone(), client);
+async fn connect_server(
+    pool: tauri::State<'_, mcp::McpPool>,
+    server: mcp::McpServer,
+) -> Result<(), String> {
+    let client = mcp::connect_server(&server)
+        .await
+        .map_err(|e| e.to_string())?;
+    pool.connections
+        .lock()
+        .await
+        .insert(server.name.clone(), client);
     Ok(())
 }
 
 #[tauri::command]
-async fn list_tools(pool: tauri::State<'_, mcp::McpPool>, server: mcp::McpServer) -> Result<Vec<rmcp::model::Tool>, String> {
+async fn list_tools(
+    pool: tauri::State<'_, mcp::McpPool>,
+    server: mcp::McpServer,
+) -> Result<Vec<rmcp::model::Tool>, String> {
     let guard = pool.connections.lock().await;
-    let client = guard.get(&server.name).ok_or("Server not connected".to_string())?;
-    mcp::list_tools(&client).await.map_err(|e| e.to_string())
+    let client = guard
+        .get(&server.name)
+        .ok_or("Server not connected".to_string())?;
+    mcp::list_tools(client).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -52,34 +66,45 @@ async fn execute_tool_call(
     tool_name: String,
     arguments: serde_json::Value,
 ) -> Result<String, String> {
-
     let guard = pool.connections.lock().await;
-    let client = guard.get(&server_name).ok_or("Server not connected".to_string())?;
+    let client = guard
+        .get(&server_name)
+        .ok_or("Server not connected".to_string())?;
     mcp::call_tool(client, &tool_name, arguments)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn save_mcp_servers(app: tauri::AppHandle, servers: Vec<mcp::McpServer>) -> Result<(), String> {
+fn save_mcp_servers(
+    app: tauri::AppHandle,
+    servers: Vec<mcp::McpServer>,
+) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     mcp::save_servers(&app_data_dir, &servers)
 }
 
 #[tauri::command]
-fn load_mcp_servers(app: tauri::AppHandle) -> Result<Vec<mcp::McpServer>, String> {
+fn load_mcp_servers(
+    app: tauri::AppHandle,
+) -> Result<Vec<mcp::McpServer>, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     mcp::load_servers(&app_data_dir)
 }
 
 #[tauri::command]
-async fn disconnect_server(pool: tauri::State<'_, mcp::McpPool>, server_name: String) -> Result<(), String> {
+async fn disconnect_server(
+    pool: tauri::State<'_, mcp::McpPool>,
+    server_name: String,
+) -> Result<(), String> {
     pool.connections.lock().await.remove(&server_name);
     Ok(())
 }
 
 #[tauri::command]
-async fn get_connected_servers(pool: tauri::State<'_, mcp::McpPool>) -> Result<Vec<String>, String> {
+async fn get_connected_servers(
+    pool: tauri::State<'_, mcp::McpPool>,
+) -> Result<Vec<String>, String> {
     let names = pool.connections.lock().await.keys().cloned().collect();
     Ok(names)
 }
@@ -92,10 +117,15 @@ async fn stream_message(
     base_url: String,
     messages: Vec<Message>,
 ) -> Result<(), String> {
-    let mut json_messages: Vec<serde_json::Value> = messages.iter().map(|m| serde_json::json!({
-        "role": m.role,
-        "content": [{"type": "text", "text": m.content}]
-    })).collect();
+    let mut json_messages: Vec<serde_json::Value> = messages
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "role": m.role,
+                "content": [{"type": "text", "text": m.content}]
+            })
+        })
+        .collect();
 
     let tools: Vec<serde_json::Value> = {
         let guard = pool.connections.lock().await;
@@ -121,7 +151,8 @@ async fn stream_message(
             &base_url,
             &json_messages,
             &tools,
-        ).await?;
+        )
+        .await?;
 
         json_messages.push(serde_json::json!({
             "role": "assistant",
@@ -136,10 +167,17 @@ async fn stream_message(
         let mut tool_results = Vec::new();
 
         for tool_use in &tool_uses {
-            app.emit("tool-call", serde_json::json!({ "name": tool_use.name })).unwrap();
+            app.emit("tool-call", serde_json::json!({ "name": tool_use.name }))
+                .unwrap();
             let mut result_content = "Tool not found".to_string();
             for client in guard.values() {
-                if let Ok(result) = mcp::call_tool(client, &tool_use.name, tool_use.input.clone()).await {
+                if let Ok(result) = mcp::call_tool(
+                    client,
+                    &tool_use.name,
+                    tool_use.input.clone(),
+                )
+                .await
+                {
                     result_content = result;
                     break;
                 }
@@ -223,7 +261,6 @@ fn delete_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
         .join("chats");
     chat.delete(&chats_dir)
 }
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
