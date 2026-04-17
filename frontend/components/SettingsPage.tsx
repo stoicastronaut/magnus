@@ -77,14 +77,26 @@ function ApiSettings() {
   );
 }
 
+const GITHUB_SERVER = {
+  name: "github",
+  display_name: "GitHub",
+  command: "npx",
+  args: ["-y", "@modelcontextprotocol/server-github"],
+  token: "",
+  env_key: "GITHUB_PERSONAL_ACCESS_TOKEN",
+};
+
 function McpConnections() {
   const [status, setStatus] = useState("");
 
   async function handleTest() {
     setStatus("Connecting...");
     try {
-      await invoke("test_mcp_connection");
-      setStatus("Done — check the terminal for output.");
+      await invoke("connect_server", { server: GITHUB_SERVER });
+      setStatus("Connected! Fetching tools...");
+      const tools = await invoke<{ name: string }[]>("list_tools", { server: GITHUB_SERVER });
+      console.log("MCP tools:", tools);
+      setStatus(`Connected — ${tools.length} tools available. Check console.`);
     } catch (err) {
       setStatus(`Error: ${err}`);
     }
@@ -93,7 +105,7 @@ function McpConnections() {
   return (
     <div>
       <h2>MCP Connections</h2>
-      <button onClick={handleTest}>Test MCP Connection</button>
+      <button onClick={handleTest}>Test GitHub MCP</button>
       {status && <p>{status}</p>}
     </div>
   );
