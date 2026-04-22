@@ -16,6 +16,8 @@ interface Settings {
 
 interface HomePageProps {
   onSettings: () => void;
+  theme: "dark" | "light";
+  onToggleTheme: () => void;
 }
 
 function formatDate(): string {
@@ -35,7 +37,7 @@ function newChat(): Chat {
   };
 }
 
-export function HomePage({ onSettings }: HomePageProps) {
+export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -177,6 +179,9 @@ export function HomePage({ onSettings }: HomePageProps) {
         hasSettings={!!settings}
         onInputChange={setInput}
         onSend={handleSend}
+        chatName={activeChat?.name}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
       />
     </main>
   );
