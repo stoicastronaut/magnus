@@ -160,7 +160,7 @@ export function HomePage({ onSettings }: HomePageProps) {
   }
 
   return (
-    <main style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "sans-serif" }}>
+    <main style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
       <Sidebar
         chats={chats}
         activeChatId={activeChatId ?? ""}

@@ -12,6 +12,37 @@ interface SettingsPageProps {
 
 type SettingsSection = "api" | "mcp";
 
+const inputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: 4,
+  padding: "6px 10px",
+  borderRadius: "var(--mg-r-xs)",
+  border: "1px solid var(--line)",
+  background: "var(--bg-2)",
+  color: "var(--fg)",
+  fontSize: 13,
+  boxSizing: "border-box",
+};
+
+const btnStyle: React.CSSProperties = {
+  padding: "6px 14px",
+  borderRadius: "var(--mg-r-xs)",
+  border: "1px solid var(--line)",
+  background: "var(--bg-2)",
+  color: "var(--fg)",
+  cursor: "pointer",
+  fontSize: 13,
+};
+
+const btnPrimaryStyle: React.CSSProperties = {
+  ...btnStyle,
+  background: "var(--brand)",
+  color: "var(--on-brand)",
+  border: "none",
+  fontWeight: 500,
+};
+
 function ApiSettings() {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.anthropic.com");
@@ -48,30 +79,21 @@ function ApiSettings() {
 
   return (
     <div>
-      <h2>API Configuration</h2>
+      <h2 style={{ color: "var(--fg)", fontWeight: 600, fontSize: 18, margin: "0 0 1.25rem" }}>API Configuration</h2>
       <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <label>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>
           API Key
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-..."
-            style={{ display: "block", width: "100%", marginTop: 4 }}
-          />
+          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-ant-..." style={inputStyle} />
         </label>
-        <label>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>
           Base URL
-          <input
-            type="text"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
-          />
+          <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={inputStyle} />
         </label>
-        <button type="submit">Save</button>
-        <button type="button" onClick={handleTestConnection}>Test Connection</button>
-        {status && <p>{status}</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="submit" style={btnPrimaryStyle}>Save</button>
+          <button type="button" onClick={handleTestConnection} style={btnStyle}>Test Connection</button>
+        </div>
+        {status && <p style={{ margin: 0, fontSize: 13, color: "var(--fg-3)" }}>{status}</p>}
       </form>
     </div>
   );
@@ -153,36 +175,34 @@ function McpConnections() {
     setArgsInput("");
   }
 
-  const inputStyle: React.CSSProperties = { display: "block", width: "100%", marginTop: 4, padding: "4px 6px" };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <h2 style={{ margin: 0 }}>MCP Connections</h2>
+      <h2 style={{ margin: 0, color: "var(--fg)", fontWeight: 600, fontSize: 18 }}>MCP Connections</h2>
 
-      {servers.length === 0 && <p style={{ color: "#999" }}>No servers configured.</p>}
+      {servers.length === 0 && <p style={{ color: "var(--fg-3)", fontSize: 13, margin: 0 }}>No servers configured.</p>}
 
       {servers.map(server => {
         const isConnected = connected.includes(server.name);
         const tools = toolsByServer[server.name] ?? [];
         return (
-          <div key={server.name} style={{ border: "1px solid #ddd", borderRadius: 8, padding: "0.75rem 1rem" }}>
+          <div key={server.name} style={{ border: "1px solid var(--line)", borderRadius: "var(--mg-r-sm)", padding: "0.75rem 1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <strong>{server.display_name}</strong>
-                <span style={{ marginLeft: 8, color: "#666", fontSize: 13 }}>{server.command} {server.args.join(" ")}</span>
+                <strong style={{ color: "var(--fg)", fontSize: 14 }}>{server.display_name}</strong>
+                <span style={{ marginLeft: 8, color: "var(--fg-3)", fontSize: 12, fontFamily: "var(--mg-mono)" }}>{server.command} {server.args.join(" ")}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {isConnected
-                  ? <button onClick={() => handleDisconnect(server)}>Disconnect</button>
-                  : <button onClick={() => handleConnect(server)}>Connect</button>}
-                <button onClick={() => handleDelete(server)} style={{ color: "red" }}>Delete</button>
+                  ? <button onClick={() => handleDisconnect(server)} style={btnStyle}>Disconnect</button>
+                  : <button onClick={() => handleConnect(server)} style={btnPrimaryStyle}>Connect</button>}
+                <button onClick={() => handleDelete(server)} style={{ ...btnStyle, color: "#e53e3e" }}>Delete</button>
               </div>
             </div>
-            {status[server.name] && <p style={{ margin: "4px 0 0", fontSize: 13, color: "#666" }}>{status[server.name]}</p>}
+            {status[server.name] && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--fg-3)" }}>{status[server.name]}</p>}
             {isConnected && tools.length > 0 && (
               <details style={{ marginTop: 8 }}>
-                <summary style={{ cursor: "pointer", fontSize: 13, color: "#555" }}>{tools.length} tools available</summary>
-                <ul style={{ margin: "4px 0 0 1rem", padding: 0, fontSize: 13 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--fg-3)" }}>{tools.length} tools available</summary>
+                <ul style={{ margin: "4px 0 0 1rem", padding: 0, fontSize: 12, color: "var(--fg-2)" }}>
                   {tools.map(t => <li key={t}>{t}</li>)}
                 </ul>
               </details>
@@ -191,14 +211,14 @@ function McpConnections() {
         );
       })}
 
-      <form onSubmit={handleAdd} style={{ border: "1px dashed #aaa", borderRadius: 8, padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <h3 style={{ margin: 0 }}>Add Server</h3>
-        <label>Display Name<input style={inputStyle} value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} placeholder="GitHub" /></label>
-        <label>Command<input style={inputStyle} value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))} placeholder="npx" /></label>
-        <label>Args (space-separated)<input style={inputStyle} value={argsInput} onChange={e => setArgsInput(e.target.value)} placeholder="-y @modelcontextprotocol/server-github" /></label>
-        <label>Env Key<input style={inputStyle} value={form.env_key} onChange={e => setForm(f => ({ ...f, env_key: e.target.value }))} placeholder="GITHUB_PERSONAL_ACCESS_TOKEN" /></label>
-        <label>Token<input type="password" style={inputStyle} value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value }))} /></label>
-        <button type="submit">Add Server</button>
+      <form onSubmit={handleAdd} style={{ border: "1px dashed var(--line)", borderRadius: "var(--mg-r-sm)", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <h3 style={{ margin: 0, color: "var(--fg)", fontSize: 14, fontWeight: 600 }}>Add Server</h3>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>Display Name<input style={inputStyle} value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} placeholder="GitHub" /></label>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>Command<input style={inputStyle} value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))} placeholder="npx" /></label>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>Args (space-separated)<input style={inputStyle} value={argsInput} onChange={e => setArgsInput(e.target.value)} placeholder="-y @modelcontextprotocol/server-github" /></label>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>Env Key<input style={inputStyle} value={form.env_key} onChange={e => setForm(f => ({ ...f, env_key: e.target.value }))} placeholder="GITHUB_PERSONAL_ACCESS_TOKEN" /></label>
+        <label style={{ color: "var(--fg-2)", fontSize: 13 }}>Token<input type="password" style={inputStyle} value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value }))} /></label>
+        <button type="submit" style={{ ...btnPrimaryStyle, alignSelf: "flex-start" }}>Add Server</button>
       </form>
     </div>
   );
@@ -213,15 +233,29 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     textAlign: "left",
     padding: "0.5rem 1rem",
     cursor: "pointer",
-    background: active ? "#e0e0e0" : "transparent",
+    background: active ? "color-mix(in oklch, var(--brand) 15%, var(--bg))" : "transparent",
     border: "none",
-    fontWeight: active ? "bold" : "normal",
+    borderRadius: "var(--mg-r-xs)",
+    fontWeight: active ? 600 : 400,
+    color: active ? "var(--brand)" : "var(--fg-2)",
+    fontSize: 13,
+    marginBottom: 2,
   });
 
   return (
-    <main style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
-      <nav style={{ width: 200, borderRight: "1px solid #ccc", padding: "1rem 0" }}>
-        <button onClick={onBack} style={{ padding: "0.5rem 1rem", marginBottom: "1rem", cursor: "pointer" }}>
+    <main style={{ display: "flex", height: "100vh", background: "var(--bg)" }}>
+      <nav style={{
+        width: 200,
+        borderRight: "1px solid var(--line)",
+        padding: "1rem 0.5rem",
+        background: "var(--bg-panel)",
+        display: "flex",
+        flexDirection: "column",
+      }}>
+        <button
+          onClick={onBack}
+          style={{ ...btnStyle, margin: "0 0.5rem 1rem", alignSelf: "flex-start" }}
+        >
           ← Back
         </button>
         <button style={navStyle(section === "api")} onClick={() => setSection("api")}>
@@ -231,7 +265,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           MCP Connections
         </button>
       </nav>
-      <div style={{ flex: 1, padding: "2rem", maxWidth: 500 }}>
+      <div style={{ flex: 1, padding: "2rem", maxWidth: 500, overflowY: "auto" }}>
         {section === "api" && <ApiSettings />}
         {section === "mcp" && <McpConnections />}
       </div>
