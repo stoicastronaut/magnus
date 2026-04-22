@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Mascot, Purr } from "./Mascot";
-import { SendIcon } from "./icons";
+import { SendIcon, SunIcon, MoonIcon } from "./icons";
 
 const SUGGESTIONS = [
   "Explain this error",
@@ -97,9 +97,12 @@ interface ChatAreaProps {
   hasSettings: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  chatName?: string;
+  theme: "dark" | "light";
+  onToggleTheme: () => void;
 }
 
-export function ChatArea({ messages, loading, input, hasSettings, onInputChange, onSend }: ChatAreaProps) {
+export function ChatArea({ messages, loading, input, hasSettings, onInputChange, onSend, chatName, theme, onToggleTheme }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
   const canSend = hasSettings && !loading && !!input.trim();
@@ -110,6 +113,40 @@ export function ChatArea({ messages, loading, input, hasSettings, onInputChange,
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)", position: "relative" }}>
+      {/* Header */}
+      <header style={{
+        height: 48,
+        flexShrink: 0,
+        padding: "0 20px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        borderBottom: "1px solid var(--line)",
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {chatName ?? "New chat"}
+        </span>
+        <button
+          onClick={onToggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          style={{
+            width: 30,
+            height: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            border: "1px solid var(--line)",
+            borderRadius: 8,
+            color: "var(--fg-3)",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          {theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
+        </button>
+      </header>
+
       {/* Messages */}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
         {messages.length === 0
