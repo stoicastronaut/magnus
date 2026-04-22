@@ -1,4 +1,7 @@
 import { useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 interface Message {
   role: "user" | "assistant";
@@ -22,9 +25,9 @@ export function ChatArea({ messages, loading, input, hasSettings, onInputChange,
   }, [messages]);
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {messages.length === 0 && (
           <div style={{ textAlign: "center", color: "#999", marginTop: "30%" }}>
             Start a conversation
@@ -40,9 +43,33 @@ export function ChatArea({ messages, loading, input, hasSettings, onInputChange,
                 borderRadius: 12,
                 background: msg.role === "user" ? "#0070f3" : "#f0f0f0",
                 color: msg.role === "user" ? "white" : "black",
-                whiteSpace: "pre-wrap",
+                whiteSpace: msg.role === "user" ? "pre-wrap" : undefined,
               }}>
-                {msg.content}
+                {msg.role === "user" ? msg.content : (
+                  <ReactMarkdown
+                    components={{
+                      code({ className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || "");
+                        const isBlock = !!match;
+                        return isBlock ? (
+                          <SyntaxHighlighter style={oneLight} language={match[1]} PreTag="div">
+                            {String(children).replace(/\n$/, "")}
+                          </SyntaxHighlighter>
+                        ) : (
+                          <code style={{ background: "#e0e0e0", borderRadius: 4, padding: "0.1em 0.3em", fontSize: "0.9em" }} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                      p({ children }) { return <p style={{ margin: "0.25em 0" }}>{children}</p>; },
+                      ul({ children }) { return <ul style={{ margin: "0.25em 0", paddingLeft: "1.25em" }}>{children}</ul>; },
+                      ol({ children }) { return <ol style={{ margin: "0.25em 0", paddingLeft: "1.25em" }}>{children}</ol>; },
+                      pre({ children }) { return <pre style={{ margin: "0.5em 0", borderRadius: 8, overflow: "auto" }}>{children}</pre>; },
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           );
