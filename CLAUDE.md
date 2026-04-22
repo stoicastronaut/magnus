@@ -196,12 +196,6 @@ Auto-generate a meaningful chat name based on the first message + response.
 - After the first assistant response, invoke a secondary Claude call with a short prompt: "Summarize this conversation in 4 words"
 - Update the chat name in the sidebar automatically
 
-### 5. MCP (Model Context Protocol) Connection
-Allow Magnus to connect to MCP servers, giving Claude access to external tools and data sources.
-- Implement MCP client in Rust
-- UI for adding/managing MCP server connections
-- Expose MCP tools to Claude via the `tools` field in the API request
-
 ## Conventions
 
 - Rust: follow `rustfmt` defaults, use `clippy` warnings as errors in CI
