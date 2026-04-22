@@ -2,8 +2,88 @@ import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Purr } from "./Mascot";
+import { Mascot, Purr } from "./Mascot";
 import { SendIcon } from "./icons";
+
+const SUGGESTIONS = [
+  "Explain this error",
+  "Rewrite this paragraph",
+  "Plan my week",
+  "Review a diff",
+  "Brainstorm names",
+  "Summarize a doc",
+];
+
+function EmptyState({ onSuggest }: { onSuggest: (text: string) => void }) {
+  return (
+    <div style={{
+      flex: 1,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 32,
+      padding: 40,
+      position: "relative",
+    }}>
+      {/* Radial sunbeam glow */}
+      <div style={{
+        position: "absolute",
+        top: "15%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 680,
+        height: 680,
+        borderRadius: "50%",
+        pointerEvents: "none",
+        background: "radial-gradient(circle, color-mix(in oklch, var(--brand) 10%, transparent), transparent 55%)",
+      }} />
+
+      {/* Mascot + purr */}
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <Mascot size={160} variant="breathing" />
+        <div style={{ marginTop: 14, color: "var(--brand)", opacity: 0.8, display: "flex", alignItems: "center", gap: 10 }}>
+          <Purr />
+          <span style={{ fontSize: 11, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>
+            idle · 72 bpm
+          </span>
+        </div>
+      </div>
+
+      {/* Headline */}
+      <div style={{ textAlign: "center", position: "relative", maxWidth: 520 }}>
+        <h1 style={{ fontSize: 40, fontWeight: 500, letterSpacing: "-0.035em", margin: 0, color: "var(--fg)" }}>
+          What shall we chase today?
+        </h1>
+        <p style={{ fontSize: 14, color: "var(--fg-2)", marginTop: 10, lineHeight: 1.6, margin: "10px 0 0" }}>
+          Pick a prompt or type below to start.
+        </p>
+      </div>
+
+      {/* Suggestion chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 620, position: "relative" }}>
+        {SUGGESTIONS.map((t) => (
+          <button
+            key={t}
+            onClick={() => onSuggest(t)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: "var(--bg-2)",
+              border: "1px solid var(--line)",
+              color: "var(--fg-2)",
+              fontSize: 12,
+              cursor: "pointer",
+              fontFamily: "var(--mg-sans)",
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -30,11 +110,7 @@ export function ChatArea({ messages, loading, input, hasSettings, onInputChange,
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)" }}>
       {/* Messages */}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        {messages.length === 0 && (
-          <div style={{ textAlign: "center", color: "var(--fg-3)", marginTop: "30%", fontSize: 14 }}>
-            Start a conversation
-          </div>
-        )}
+        {messages.length === 0 && <EmptyState onSuggest={onInputChange} />}
         {messages.map((msg, i) => {
           if (msg.role === "assistant" && msg.content === "") return null;
           return (
