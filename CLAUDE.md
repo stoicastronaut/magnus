@@ -191,16 +191,10 @@ Allow Claude to interact with the local filesystem (move, copy, create, delete f
 - Connect to Claude's tool_use API feature
 - Security: strict permission model, user must approve each action type
 
-### 4. Automatic Chat Naming
-Auto-generate a meaningful chat name based on the first message + response.
-- After the first assistant response, invoke a secondary Claude call with a short prompt: "Summarize this conversation in 4 words"
-- Update the chat name in the sidebar automatically
-
-### 5. MCP (Model Context Protocol) Connection
-Allow Magnus to connect to MCP servers, giving Claude access to external tools and data sources.
-- Implement MCP client in Rust
-- UI for adding/managing MCP server connections
-- Expose MCP tools to Claude via the `tools` field in the API request
+### 4. Markdown Rendering
+Render assistant messages as formatted markdown instead of plain text.
+- Use a React markdown library (e.g. `react-markdown`) in `ChatArea`
+- Support code blocks with syntax highlighting
 
 ## Conventions
 
