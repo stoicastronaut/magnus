@@ -77,7 +77,7 @@ export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename
   const contextMenuChat = contextMenu ? chats.find((c) => c.id === contextMenu.chatId) : null;
 
   return (
-    <div style={{ width: 240, display: "flex", flexDirection: "column", borderRight: "1px solid #eee", background: "#fafafa" }}>
+    <div style={{ width: 240, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", borderRight: "1px solid #eee", background: "#fafafa" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", borderBottom: "1px solid #eee" }}>
         <span style={{ fontWeight: 700, fontSize: 15 }}>Magnus</span>
