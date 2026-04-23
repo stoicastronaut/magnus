@@ -6,10 +6,8 @@ html, body, #root {
 }
 
 body {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  color: #0f0f0f;
-  background-color: #ffffff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
