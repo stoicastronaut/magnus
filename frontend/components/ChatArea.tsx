@@ -273,6 +273,7 @@ export function ChatArea({ messages, loading, input, hasSettings, onInputChange,
               {input.length ? `${input.length} chars` : "idle"}
             </span>
             <button
+              aria-label="Send"
               onClick={onSend}
               disabled={!canSend}
               style={{
