@@ -1,0 +1,186 @@
+/* Magnus mascot — CSS-drawn tabby loaf. Scales with --mascot-size. */
+
+.magnus {
+  --mascot-size: 160px;
+  --coat:        #E8752C;
+  --coat-shadow: #B8530F;
+  --cream:       #FBEFDC;
+  --pink:        #E8A89A;
+  position: relative;
+  width: var(--mascot-size);
+  height: calc(var(--mascot-size) * 0.85);
+  display: inline-block;
+}
+
+.magnus__body {
+  position: absolute;
+  left: 8%; right: 8%;
+  bottom: 0;
+  height: 62%;
+  background: var(--coat);
+  border-radius: 48% 48% 42% 42% / 55% 55% 45% 45%;
+  box-shadow: inset 0 -8% 0 rgba(0,0,0,0.06);
+}
+
+.magnus__stripe {
+  position: absolute;
+  background: var(--coat-shadow);
+  opacity: 0.55;
+  border-radius: 50%;
+}
+.magnus__stripe--b1 { left: 18%; top: 12%; width: 14%; height: 55%; transform: rotate(-8deg); }
+.magnus__stripe--b2 { left: 35%; top: 8%;  width: 10%; height: 60%; transform: rotate(-4deg); }
+.magnus__stripe--b3 { left: 52%; top: 6%;  width: 12%; height: 58%; transform: rotate(2deg); }
+.magnus__stripe--b4 { left: 70%; top: 14%; width: 10%; height: 50%; transform: rotate(8deg); }
+
+.magnus__bib {
+  position: absolute;
+  left: 36%; right: 36%;
+  bottom: 2%;
+  height: 30%;
+  background: var(--cream);
+  border-radius: 50% 50% 40% 40%;
+}
+
+.magnus__head {
+  position: absolute;
+  left: 22%;
+  top: 4%;
+  width: 56%;
+  height: 48%;
+  background: var(--coat);
+  border-radius: 48% 48% 44% 44% / 52% 52% 48% 48%;
+}
+
+.magnus__ear {
+  position: absolute;
+  top: -4%;
+  width: 18%;
+  height: 26%;
+  background: var(--coat);
+}
+.magnus__ear--l { left: 20%; clip-path: polygon(0 100%, 50% 0, 100% 100%); transform: rotate(-8deg); }
+.magnus__ear--r { right: 20%; clip-path: polygon(0 100%, 50% 0, 100% 100%); transform: rotate(8deg); }
+
+.magnus__ear-inner {
+  position: absolute;
+  top: 6%;
+  width: 10%;
+  height: 14%;
+  background: var(--pink);
+  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+}
+.magnus__ear-inner--l { left: 24%; transform: rotate(-8deg); }
+.magnus__ear-inner--r { right: 24%; transform: rotate(8deg); }
+
+.magnus__m {
+  position: absolute;
+  top: 8%;
+  left: 44%;
+  width: 12%;
+  height: 14%;
+  background: linear-gradient(90deg, transparent 35%, var(--coat-shadow) 35% 45%, transparent 45% 55%, var(--coat-shadow) 55% 65%, transparent 65%);
+  opacity: 0.6;
+  transform: translateX(-50%);
+}
+
+.magnus__eye {
+  position: absolute;
+  top: 24%;
+  width: 7%;
+  height: 8%;
+  background: #1a1410;
+  border-radius: 50%;
+}
+.magnus__eye--l { left: 34%; }
+.magnus__eye--r { right: 34%; }
+.magnus__eye::after {
+  content: '';
+  position: absolute;
+  top: 15%; left: 20%;
+  width: 35%; height: 35%;
+  background: white;
+  border-radius: 50%;
+  opacity: 0.9;
+}
+
+.magnus__muzzle {
+  position: absolute;
+  top: 34%; left: 36%;
+  width: 28%; height: 14%;
+  background: var(--cream);
+  border-radius: 50%;
+}
+
+.magnus__nose {
+  position: absolute;
+  top: 36%; left: 50%;
+  transform: translateX(-50%);
+  width: 5%; height: 4%;
+  background: var(--pink);
+  border-radius: 40% 40% 50% 50%;
+}
+
+.magnus__mouth {
+  position: absolute;
+  top: 41%; left: 50%;
+  transform: translateX(-50%);
+  width: 12%; height: 6%;
+  border: 1.5px solid #1a1410;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-radius: 0 0 100% 100% / 0 0 100% 100%;
+  clip-path: polygon(0 0, 50% 100%, 100% 0);
+  opacity: 0;
+}
+
+.magnus__whisker {
+  position: absolute;
+  top: 38%;
+  height: 1px;
+  background: rgba(26,20,16,0.6);
+}
+.magnus__whisker--l1 { left: 10%; width: 24%; transform: rotate(-4deg); }
+.magnus__whisker--l2 { left: 10%; width: 22%; top: 41%; transform: rotate(2deg); }
+.magnus__whisker--r1 { right: 10%; width: 24%; transform: rotate(4deg); }
+.magnus__whisker--r2 { right: 10%; width: 22%; top: 41%; transform: rotate(-2deg); }
+
+.magnus__paw {
+  position: absolute;
+  bottom: 2%;
+  width: 14%; height: 10%;
+  background: var(--cream);
+  border-radius: 50%;
+}
+.magnus__paw--l { left: 28%; }
+.magnus__paw--r { right: 28%; }
+
+.magnus__tail {
+  position: absolute;
+  right: 0; bottom: 14%;
+  width: 22%; height: 10%;
+  background: var(--coat);
+  border-radius: 50%;
+  transform-origin: left center;
+  transform: rotate(-18deg);
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.08);
+}
+
+/* Variants */
+.magnus--sleepy .magnus__eye { height: 2%; border-radius: 4px; top: 28%; }
+.magnus--sleepy .magnus__eye::after { display: none; }
+.magnus--sleepy .magnus__mouth { opacity: 1; }
+
+@keyframes magnus-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50%       { transform: scaleY(1.025) translateY(-1%); }
+}
+.magnus--breathing .magnus__body { animation: magnus-breathe 3.2s ease-in-out infinite; transform-origin: bottom center; }
+.magnus--breathing .magnus__head { animation: magnus-breathe 3.2s ease-in-out infinite; transform-origin: bottom center; }
+
+@keyframes magnus-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.1); }
+}
+.magnus--blinking .magnus__eye { animation: magnus-blink 5s infinite; transform-origin: center; }

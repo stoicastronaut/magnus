@@ -35,7 +35,7 @@ describe("Sidebar", () => {
   it("calls onNewChat when + button is clicked", async () => {
     const onNewChat = vi.fn();
     render(<Sidebar {...defaultProps} onNewChat={onNewChat} />);
-    await userEvent.click(screen.getByTitle("New chat"));
+    await userEvent.click(screen.getByRole("button", { name: /new chat/i }));
     expect(onNewChat).toHaveBeenCalled();
   });
 
@@ -77,5 +77,42 @@ describe("Sidebar", () => {
     render(<Sidebar {...defaultProps} onSettings={onSettings} />);
     await userEvent.click(screen.getByTitle("Settings"));
     expect(onSettings).toHaveBeenCalled();
+  });
+
+  it("collapses sidebar when collapse button is clicked", async () => {
+    render(<Sidebar {...defaultProps} />);
+    await userEvent.click(screen.getByTitle("Collapse sidebar"));
+    expect(screen.queryByText("First Chat")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Expand sidebar")).toBeInTheDocument();
+  });
+
+  it("expands sidebar when expand button is clicked after collapse", async () => {
+    render(<Sidebar {...defaultProps} />);
+    await userEvent.click(screen.getByTitle("Collapse sidebar"));
+    await userEvent.click(screen.getByTitle("Expand sidebar"));
+    expect(screen.getByText("First Chat")).toBeInTheDocument();
+  });
+
+  it("shows chat titles as button titles in collapsed mode", async () => {
+    render(<Sidebar {...defaultProps} />);
+    await userEvent.click(screen.getByTitle("Collapse sidebar"));
+    expect(screen.getByTitle("First Chat")).toBeInTheDocument();
+    expect(screen.getByTitle("Second Chat")).toBeInTheDocument();
+  });
+
+  it("calls onNewChat from collapsed rail button", async () => {
+    const onNewChat = vi.fn();
+    render(<Sidebar {...defaultProps} onNewChat={onNewChat} />);
+    await userEvent.click(screen.getByTitle("Collapse sidebar"));
+    await userEvent.click(screen.getByTitle("New chat"));
+    expect(onNewChat).toHaveBeenCalled();
+  });
+
+  it("calls onSelectChat from collapsed rail when a chat button is clicked", async () => {
+    const onSelectChat = vi.fn();
+    render(<Sidebar {...defaultProps} onSelectChat={onSelectChat} />);
+    await userEvent.click(screen.getByTitle("Collapse sidebar"));
+    await userEvent.click(screen.getByTitle("Second Chat"));
+    expect(onSelectChat).toHaveBeenCalledWith("2");
   });
 });
