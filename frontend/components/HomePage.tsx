@@ -18,6 +18,7 @@ interface HomePageProps {
   onSettings: () => void;
   theme: "dark" | "light";
   onToggleTheme: () => void;
+  settingsVersion: number;
 }
 
 function formatDate(): string {
@@ -28,7 +29,7 @@ function formatDate(): string {
   return `${dd}-${mm}-${yy}`;
 }
 
-export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
+export function HomePage({ onSettings, theme, onToggleTheme, settingsVersion }: HomePageProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -44,15 +45,17 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
 
   const effectiveProvider = settings?.providers.find((p) => p.id === effectiveProviderId) ?? null;
 
+  // Reload settings on mount and whenever settingsVersion bumps (e.g., after returning from SettingsPage)
   useEffect(() => {
     getSettings()
       .then((s) => setSettings(s))
       .catch(() => {});
+  }, [settingsVersion]);
 
+  useEffect(() => {
     loadChats()
       .then((loaded) => {
         if (loaded.length === 0) {
-          // Don't create a chat immediately — let the user start one
           setChats([]);
           setActiveChatId(null);
         } else {
@@ -116,11 +119,19 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
   }
 
   async function handleSend() {
-    if (!input.trim() || loading || !activeChat) return;
+    console.log("[handleSend] called", { input, loading, activeChat });
+    if (!input.trim() || loading || !activeChat) {
+      console.log("[handleSend] early return", { hasInput: !!input.trim(), loading, hasActiveChat: !!activeChat });
+      return;
+    }
 
     const pid = activeChat.provider_id || effectiveProviderId;
     const mid = selectedModelId;
-    if (!pid || !mid) return;
+    console.log("[handleSend] resolved", { pid, mid });
+    if (!pid || !mid) {
+      console.log("[handleSend] missing provider or model");
+      return;
+    }
 
     const isFirstMessage = activeChat.messages.length === 0;
 
@@ -143,6 +154,7 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
     let accumulated = "";
 
     const unlisten = await listen<string>("stream-token", (event) => {
+      console.log("[stream-token] received", event.payload?.length, "chars");
       accumulated += event.payload;
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
@@ -153,7 +165,9 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
     });
 
     try {
+      console.log("[handleSend] calling streamMessage", { pid, mid, messageCount: newMessages.length });
       await streamMessage(pid, mid, newMessages);
+      console.log("[handleSend] streamMessage returned, accumulated:", accumulated.length, "chars");
 
       setChats((prev) => {
         const chat = prev.find((c) => c.id === activeChatId);
@@ -169,6 +183,7 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
           .catch(() => {});
       }
     } catch (err) {
+      console.error("[handleSend] error:", err);
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
         const updated = [...c.messages];

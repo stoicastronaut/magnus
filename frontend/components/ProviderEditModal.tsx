@@ -14,7 +14,7 @@ type Mode =
 interface Props {
   mode: Mode;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (providerId: string, hadKey: boolean) => void;
 }
 
 export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
@@ -29,11 +29,11 @@ export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
   );
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(() => {
-    if (mode.existing?._type.kind === "custom") return mode.existing._type.base_url;
+    if (mode.existing?.kind === "custom") return mode.existing.base_url;
     return "";
   });
   const [protocol, setProtocol] = useState<Protocol>(() => {
-    if (mode.existing?._type.kind === "custom") return mode.existing._type.protocol;
+    if (mode.existing?.kind === "custom") return mode.existing.protocol;
     return "anthropic";
   });
   const [saving, setSaving] = useState(false);
@@ -43,23 +43,26 @@ export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
     setError(null);
     if (isCustom && !displayName.trim()) { setError("Display name is required."); return; }
     if (isCustom && !baseUrl.trim()) { setError("Base URL is required."); return; }
+    // For brand-new providers, require an API key
+    if (!mode.existing && !apiKey.trim()) { setError("API key is required."); return; }
 
     const config: ProviderConfig = isCustom
       ? {
           id: mode.existing?.id ?? crypto.randomUUID(),
           display_name: displayName.trim(),
-          _type: { kind: "custom", protocol, base_url: baseUrl.trim() },
+          kind: "custom", protocol, base_url: baseUrl.trim(),
         }
       : {
           id: mode.which!,
           display_name: builtInMeta!.display_name,
-          _type: { kind: "built_in", which: mode.which! },
+          kind: "built_in", which: mode.which!,
         };
 
     setSaving(true);
     try {
-      await upsertProvider(config, apiKey.trim() || null);
-      onSaved();
+      const trimmedKey = apiKey.trim();
+      await upsertProvider(config, trimmedKey || null);
+      onSaved(config.id, !!trimmedKey);
       onClose();
     } catch (e) {
       setError(String(e));

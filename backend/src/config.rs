@@ -17,7 +17,7 @@ pub struct ProviderConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all= "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProviderType {
     BuiltIn { which: BuiltInId },
     Custom { protocol: Protocol, base_url: String},

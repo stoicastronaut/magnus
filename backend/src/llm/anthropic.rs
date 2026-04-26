@@ -165,20 +165,33 @@ impl super::LlmClient for AnthropicClient {
             body["tools"] = serde_json::json!(tools);
         }
 
+        let url = format!("{}v1/messages", self.base_url);
+        eprintln!("[anthropic.stream_raw] POST {}", url);
         let response = self.http
-            .post(format!("{}v1/messages", self.base_url))
+            .post(&url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .json(&body)
             .send()
             .await?;
 
+        let status = response.status();
+        eprintln!("[anthropic.stream_raw] response status: {}", status);
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            eprintln!("[anthropic.stream_raw] error body: {}", body);
+            return Err(super::LlmError::Api(format!("HTTP {}: {}", status, body)));
+        }
+
         let mut stream = response.bytes_stream();
         let mut state = SseState::new();
+        let mut chunk_count = 0;
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
+            chunk_count += 1;
             let text = String::from_utf8_lossy(&chunk);
+            eprintln!("[anthropic.stream_raw] chunk {} ({} bytes)", chunk_count, chunk.len());
             for line in text.lines() {
                 if !line.starts_with("data: ") {
                     continue;
@@ -191,10 +204,12 @@ impl super::LlmClient for AnthropicClient {
                     continue;
                 };
                 if let Some(token) = state.process_event(&json) {
+                    eprintln!("[anthropic.stream_raw] emitting token: {:?}", token);
                     app.emit("stream-token", token).unwrap();
                 }
             }
         }
+        eprintln!("[anthropic.stream_raw] stream ended after {} chunks, {} content blocks", chunk_count, state.content_blocks.len());
 
         Ok((state.content_blocks, state.tool_uses))
     }
