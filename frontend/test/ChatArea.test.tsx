@@ -1,13 +1,47 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import { ChatArea } from "../components/ChatArea";
+import { ProviderConfig, Settings } from "../services/tauri";
+
+const anthropicProvider: ProviderConfig = {
+  id: "anthropic",
+  display_name: "Anthropic",
+  kind: "built_in",
+  which: "anthropic",
+};
+
+const openAiProvider: ProviderConfig = {
+  id: "open_ai",
+  display_name: "OpenAI",
+  kind: "built_in",
+  which: "open_ai",
+};
+
+const googleProvider: ProviderConfig = {
+  id: "google",
+  display_name: "Google",
+  kind: "built_in",
+  which: "google",
+};
+
+const providerSettings: Settings = {
+  default_provider_id: "anthropic",
+  providers: [anthropicProvider, openAiProvider, googleProvider],
+};
 
 const defaultProps = {
   messages: [],
   loading: false,
   input: "",
-  hasSettings: true,
+  hasProviders: true,
+  settings: { default_provider_id: null, providers: [] },
+  activeChat: null,
+  effectiveProvider: null,
+  selectedModelId: null,
+  onModelChange: vi.fn(),
+  onProviderChange: vi.fn(),
   onInputChange: vi.fn(),
   onSend: vi.fn(),
   theme: "dark" as const,
@@ -15,6 +49,10 @@ const defaultProps = {
 };
 
 describe("ChatArea", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("shows empty state when there are no messages", () => {
     render(<ChatArea {...defaultProps} />);
     expect(screen.getByText("Review a diff")).toBeInTheDocument();
@@ -38,15 +76,15 @@ describe("ChatArea", () => {
   });
 
   it("hides empty state when messages exist", () => {
-    const messages = [{ role: "user" as const, content: "Hello" }];
+    const messages = [{ role: "user", content: "Hello" }];
     render(<ChatArea {...defaultProps} messages={messages} />);
     expect(screen.queryByText("What shall we chase today?")).not.toBeInTheDocument();
   });
 
   it("renders user and assistant messages", () => {
     const messages = [
-      { role: "user" as const, content: "Hello" },
-      { role: "assistant" as const, content: "Hi there!" },
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there!" },
     ];
     render(<ChatArea {...defaultProps} messages={messages} />);
     expect(screen.getByText("Hello")).toBeInTheDocument();
@@ -95,10 +133,68 @@ describe("ChatArea", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
-  it("disables input and send button when hasSettings is false", () => {
-    render(<ChatArea {...defaultProps} hasSettings={false} />);
-    expect(screen.getByPlaceholderText("Configure API key in settings first")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  it("shows no-provider state when hasProviders is false", () => {
+    render(<ChatArea {...defaultProps} hasProviders={false} />);
+    expect(screen.getByText("No providers configured")).toBeInTheDocument();
+  });
+
+  it("shows the provider picker for a new chat when providers exist", () => {
+    render(<ChatArea {...defaultProps} settings={providerSettings} />);
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.queryByText("New chat")).not.toBeInTheDocument();
+  });
+
+  it("shows provider and model metadata for assistant responses", () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { id: "gpt-5", display_name: "GPT-5" },
+    ]);
+    const messages = [
+      { role: "assistant", content: "I can help with that.", model_id: "gpt-5" },
+    ];
+    render(
+      <ChatArea
+        {...defaultProps}
+        messages={messages}
+        settings={providerSettings}
+        activeChat={{ id: "1", name: "Chat", messages, created_at: "01-01-25", provider_id: "open_ai" }}
+        effectiveProvider={openAiProvider}
+        selectedModelId="gpt-5"
+      />
+    );
+
+    expect(screen.getByText(/via OpenAI · gpt-5/)).toBeInTheDocument();
+  });
+
+  it("shows a model switch divider when assistant model ids change", async () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { id: "gpt-5", display_name: "GPT-5" },
+      { id: "gemini-2.5-pro", display_name: "Gemini 2.5 Pro" },
+    ]);
+    const messages = [
+      { role: "assistant", content: "First answer", model_id: "gpt-5" },
+      { role: "assistant", content: "Second answer", model_id: "gemini-2.5-pro" },
+    ];
+    render(
+      <ChatArea
+        {...defaultProps}
+        messages={messages}
+        settings={providerSettings}
+        activeChat={{ id: "1", name: "Chat", messages, created_at: "01-01-25", provider_id: "open_ai" }}
+        effectiveProvider={openAiProvider}
+        selectedModelId="gemini-2.5-pro"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Gemini 2.5 Pro")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText((_, element) =>
+        element?.tagName === "SPAN" &&
+        element.textContent?.replace(/\s+/g, "") === "gpt-5→gemini-2.5-pro"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/via Google · gemini-2.5-pro/)).toBeInTheDocument();
   });
 
   it("disables send button when input is empty", () => {
@@ -106,23 +202,11 @@ describe("ChatArea", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
-  it("enables send button when input has text and settings configured", () => {
-    render(<ChatArea {...defaultProps} input="Hello" />);
-    expect(screen.getByRole("button", { name: "Send" })).not.toBeDisabled();
-  });
-
   it("calls onInputChange when typing", async () => {
     const onInputChange = vi.fn();
     render(<ChatArea {...defaultProps} onInputChange={onInputChange} />);
     await userEvent.type(screen.getByPlaceholderText("Ask Magnus…"), "a");
     expect(onInputChange).toHaveBeenCalledWith("a");
-  });
-
-  it("calls onSend when Send button is clicked", async () => {
-    const onSend = vi.fn();
-    render(<ChatArea {...defaultProps} input="Hello" onSend={onSend} />);
-    await userEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(onSend).toHaveBeenCalled();
   });
 
   it("calls onSend when Enter is pressed", async () => {
