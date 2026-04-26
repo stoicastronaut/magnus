@@ -3,19 +3,30 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 mod client;
 mod trust;
+mod validate;
 pub use client::{call_tool, connect, connect_server, list_tools, McpClient};
 pub use trust::{load_trust_store, save_trust_store, ToolTrust};
+pub use validate::validate_command;
+
+fn default_server_id() -> String {
+    Uuid::new_v4().to_string()
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct McpServer {
+    #[serde(default = "default_server_id")]
+    pub id: String,
     pub name: String,
     pub display_name: String,
     pub command: String,
     pub args: Vec<String>,
     pub token: Option<String>,
     pub env_key: Option<String>,
+    #[serde(default)]
+    pub locally_created: bool,
 }
 
 pub struct McpPool {
@@ -58,12 +69,14 @@ mod tests {
 
     fn make_server(name: &str) -> McpServer {
         McpServer {
+            id: Uuid::new_v4().to_string(),
             name: name.to_string(),
             display_name: name.to_string(),
             command: "npx".to_string(),
             args: vec!["-y".to_string(), "some-server".to_string()],
             token: Some("tok".to_string()),
             env_key: Some("MY_TOKEN".to_string()),
+            locally_created: true,
         }
     }
 
@@ -102,5 +115,53 @@ mod tests {
         assert_eq!(loaded[0].args, vec!["-y", "some-server"]);
         assert_eq!(loaded[0].token.as_deref(), Some("tok"));
         assert_eq!(loaded[0].env_key.as_deref(), Some("MY_TOKEN"));
+    }
+
+    #[test]
+    fn test_load_missing_id_generates_and_rewrites() {
+        let dir = tempdir().unwrap();
+        // Write a legacy server JSON without id
+        let legacy_json = r#"[
+  {
+    "name": "github",
+    "display_name": "GitHub",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "token": null,
+    "env_key": null
+  }
+]"#;
+        let path = dir.path().join("mcp_servers.json");
+        fs::write(&path, legacy_json).unwrap();
+
+        // Load should auto-generate id with default serde
+        let loaded = load_servers(dir.path()).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(!loaded[0].id.is_empty());
+        // id should be a valid UUID
+        assert!(uuid::Uuid::parse_str(&loaded[0].id).is_ok());
+    }
+
+    #[test]
+    fn test_load_missing_locally_created_defaults_to_false() {
+        let dir = tempdir().unwrap();
+        // Write a server JSON without locally_created
+        let legacy_json = r#"[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "github",
+    "display_name": "GitHub",
+    "command": "npx",
+    "args": ["-y"],
+    "token": null,
+    "env_key": null
+  }
+]"#;
+        let path = dir.path().join("mcp_servers.json");
+        fs::write(&path, legacy_json).unwrap();
+
+        let loaded = load_servers(dir.path()).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(!loaded[0].locally_created);
     }
 }

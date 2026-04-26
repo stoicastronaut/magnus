@@ -12,7 +12,7 @@ pub enum ToolTrust {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct TrustStore {
-    /// key = "{server_name}::{tool_name}"
+    /// key = "{server_id}::{tool_name}"
     pub tools: HashMap<String, ToolTrust>,
     pub destructive_patterns: Vec<String>,
 }
@@ -44,10 +44,10 @@ impl TrustStore {
     /// Defaults to AskEveryTime if not found
     pub fn get_tool_trust(
         &self,
-        server_name: &str,
+        server_id: &str,
         tool_name: &str,
     ) -> ToolTrust {
-        let key = format!("{}::{}", server_name, tool_name);
+        let key = format!("{}::{}", server_id, tool_name);
         self.tools
             .get(&key)
             .cloned()
@@ -57,11 +57,11 @@ impl TrustStore {
     /// Set the trust level for a tool
     pub fn set_tool_trust(
         &mut self,
-        server_name: &str,
+        server_id: &str,
         tool_name: &str,
         trust: ToolTrust,
     ) {
-        let key = format!("{}::{}", server_name, tool_name);
+        let key = format!("{}::{}", server_id, tool_name);
         self.tools.insert(key, trust);
     }
 
@@ -70,18 +70,18 @@ impl TrustStore {
     /// Always returns false for Disabled or destructive patterns
     pub fn can_execute_without_prompt(
         &self,
-        server_name: &str,
+        server_id: &str,
         tool_name: &str,
     ) -> bool {
         if self.is_destructive(tool_name) {
             return false;
         }
-        self.get_tool_trust(server_name, tool_name) == ToolTrust::AlwaysAllow
+        self.get_tool_trust(server_id, tool_name) == ToolTrust::AlwaysAllow
     }
 
     /// Check if a tool is disabled
-    pub fn is_tool_disabled(&self, server_name: &str, tool_name: &str) -> bool {
-        self.get_tool_trust(server_name, tool_name) == ToolTrust::Disabled
+    pub fn is_tool_disabled(&self, server_id: &str, tool_name: &str) -> bool {
+        self.get_tool_trust(server_id, tool_name) == ToolTrust::Disabled
     }
 }
 
@@ -184,7 +184,7 @@ mod tests {
     fn test_default_trust_is_ask_every_time() {
         let store = TrustStore::new();
         assert_eq!(
-            store.get_tool_trust("my_server", "my_tool"),
+            store.get_tool_trust("my_server_id", "my_tool"),
             ToolTrust::AskEveryTime
         );
     }
@@ -192,9 +192,9 @@ mod tests {
     #[test]
     fn test_set_and_get_tool_trust() {
         let mut store = TrustStore::new();
-        store.set_tool_trust("server1", "tool1", ToolTrust::AlwaysAllow);
+        store.set_tool_trust("server-id-1", "tool1", ToolTrust::AlwaysAllow);
         assert_eq!(
-            store.get_tool_trust("server1", "tool1"),
+            store.get_tool_trust("server-id-1", "tool1"),
             ToolTrust::AlwaysAllow
         );
     }
@@ -203,38 +203,37 @@ mod tests {
     fn test_always_allow_overridden_by_destructive() {
         let mut store = TrustStore::new();
         store.set_tool_trust(
-            "server1",
+            "server-id-1",
             "filesystem.delete",
             ToolTrust::AlwaysAllow,
         );
-        assert!(
-            !store.can_execute_without_prompt("server1", "filesystem.delete")
-        );
+        assert!(!store
+            .can_execute_without_prompt("server-id-1", "filesystem.delete"));
     }
 
     #[test]
     fn test_disabled_tool() {
         let mut store = TrustStore::new();
-        store.set_tool_trust("server1", "tool1", ToolTrust::Disabled);
-        assert!(store.is_tool_disabled("server1", "tool1"));
+        store.set_tool_trust("server-id-1", "tool1", ToolTrust::Disabled);
+        assert!(store.is_tool_disabled("server-id-1", "tool1"));
     }
 
     #[test]
     fn test_roundtrip_serialization() {
         let dir = tempdir().unwrap();
         let mut store = TrustStore::new();
-        store.set_tool_trust("server1", "tool1", ToolTrust::AlwaysAllow);
-        store.set_tool_trust("server2", "tool2", ToolTrust::Disabled);
+        store.set_tool_trust("server-id-1", "tool1", ToolTrust::AlwaysAllow);
+        store.set_tool_trust("server-id-2", "tool2", ToolTrust::Disabled);
 
         save_trust_store(dir.path(), &store).unwrap();
         let loaded = load_trust_store(dir.path()).unwrap();
 
         assert_eq!(
-            loaded.get_tool_trust("server1", "tool1"),
+            loaded.get_tool_trust("server-id-1", "tool1"),
             ToolTrust::AlwaysAllow
         );
         assert_eq!(
-            loaded.get_tool_trust("server2", "tool2"),
+            loaded.get_tool_trust("server-id-2", "tool2"),
             ToolTrust::Disabled
         );
         assert_eq!(loaded.destructive_patterns.len(), 6);

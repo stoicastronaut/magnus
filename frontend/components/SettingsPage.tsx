@@ -464,12 +464,14 @@ function ApiSection() {
 // ── MCP section ────────────────────────────────────────────────────────────
 
 interface McpServerLocal {
+  id?: string;
   name: string;
   display_name: string;
   command: string;
   args: string[];
   token?: string;
   env_key?: string;
+  locally_created?: boolean;
 }
 
 const emptyForm = (): Partial<McpServerLocal> => ({ display_name: "", command: "", args: [], token: "", env_key: "" });
@@ -487,6 +489,30 @@ function ServerGlyph({ name }: { name: string }) {
   );
 }
 
+const MCP_PRESETS = [
+  {
+    name: "filesystem",
+    display_name: "Filesystem MCP",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "<path>"],
+    description: "Read, write, and list files with permission checks",
+  },
+  {
+    name: "github",
+    display_name: "GitHub MCP",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-github"],
+    description: "Access GitHub repositories and issues",
+  },
+  {
+    name: "linear",
+    display_name: "Linear MCP",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-linear"],
+    description: "Manage Linear issues and projects",
+  },
+];
+
 function McpSection() {
   const [servers, setServers] = useState<McpServerLocal[]>([]);
   const [connected, setConnected] = useState<string[]>([]);
@@ -496,6 +522,9 @@ function McpSection() {
   const [argsInput, setArgsInput] = useState("");
   const [status, setStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [trustCheckbox, setTrustCheckbox] = useState(false);
+  const [resolvedPath, setResolvedPath] = useState<string | null>(null);
 
   useEffect(() => {
     loadMcpServers().then((ss) => setServers(ss as unknown as McpServerLocal[])).catch(() => {});
@@ -536,9 +565,11 @@ function McpSection() {
     if (!form.display_name || !form.command) return;
     const name = form.display_name.toLowerCase().replace(/\s+/g, "_");
     const server: McpServerLocal = {
+      id: crypto.randomUUID?.() || undefined,
       name, display_name: form.display_name!,
       command: form.command!, args: argsInput.split(" ").filter(Boolean),
       token: form.token || undefined, env_key: form.env_key || undefined,
+      locally_created: true,
     };
     await persist([...servers, server]);
     setForm(emptyForm()); setArgsInput(""); setShowAdd(false);
@@ -621,34 +652,114 @@ function McpSection() {
       </div>
 
       {showAdd && (
-        <form onSubmit={handleAdd} style={{
-          border: "1px solid var(--line)", borderRadius: 12,
-          padding: 20, display: "flex", flexDirection: "column", gap: 14,
-        }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--fg)" }}>Add server</h3>
-          {[
-            { label: "Display name", key: "display_name" as const, placeholder: "GitHub" },
-            { label: "Command", key: "command" as const, placeholder: "npx" },
-            { label: "Env key", key: "env_key" as const, placeholder: "GITHUB_TOKEN" },
-          ].map(({ label, key, placeholder }) => (
-            <div key={key}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>{label}</label>
-              <input style={inputStyle} value={form[key] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} />
+        <>
+          {!showAdvanced ? (
+            <div style={{
+              border: "1px solid var(--line)", borderRadius: 12,
+              padding: 20, display: "flex", flexDirection: "column", gap: 14,
+            }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--fg)" }}>Recommended MCP servers</h3>
+              <p style={{ margin: 0, fontSize: 13, color: "var(--fg-2)" }}>Click "Add" to use one of these trusted configurations, or switch to "Advanced" for custom commands.</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {MCP_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    onClick={() => {
+                      setForm({
+                        display_name: preset.display_name,
+                        command: preset.command,
+                        env_key: "",
+                        token: "",
+                      });
+                      setArgsInput(preset.args.join(" "));
+                      setTrustCheckbox(false);
+                      setResolvedPath(null);
+                    }}
+                    style={{
+                      padding: 12, borderRadius: 8,
+                      border: "1px solid var(--line)", background: "var(--bg-2)",
+                      cursor: "pointer", textAlign: "left", color: "var(--fg)",
+                      fontFamily: "var(--mg-sans)", fontSize: 13,
+                    }}
+                  >
+                    <div style={{ fontWeight: 500, marginBottom: 4 }}>{preset.display_name}</div>
+                    <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{preset.description}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{
+                padding: 12, borderRadius: 8, background: "color-mix(in oklch, var(--fg-3) 5%, var(--bg))",
+                fontSize: 12, color: "var(--fg-2)",
+              }}>
+                <button
+                  onClick={() => setShowAdvanced(true)}
+                  style={{
+                    background: "none", border: "none", color: "var(--brand)",
+                    cursor: "pointer", fontSize: 12, fontWeight: 500, padding: 0,
+                  }}
+                >
+                  Advanced: Add custom command →
+                </button>
+              </div>
+              <button type="button" onClick={() => { setShowAdd(false); setShowAdvanced(false); }} style={ghostBtn()}>Cancel</button>
             </div>
-          ))}
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>Args</label>
-            <input style={inputStyle} value={argsInput} onChange={(e) => setArgsInput(e.target.value)} placeholder="-y @modelcontextprotocol/server-github" />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>Token</label>
-            <input type="password" style={inputStyle} value={form.token ?? ""} onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))} />
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="submit" style={primaryBtn()}>Add</button>
-            <button type="button" onClick={() => setShowAdd(false)} style={ghostBtn()}>Cancel</button>
-          </div>
-        </form>
+          ) : (
+            <form onSubmit={handleAdd} style={{
+              border: "1px solid var(--line)", borderRadius: 12,
+              padding: 20, display: "flex", flexDirection: "column", gap: 14,
+            }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--fg)" }}>Add custom MCP server</h3>
+              <div style={{
+                padding: 12, borderRadius: 8, background: "oklch(0.65 0.18 25 / 0.1)",
+                borderLeft: "3px solid oklch(0.65 0.18 25)",
+                fontSize: 12, color: "var(--fg-2)",
+              }}>
+                ⚠️ This will run an arbitrary command on your machine. Only proceed if you fully trust the source.
+              </div>
+              {[
+                { label: "Display name", key: "display_name" as const, placeholder: "My Custom Server" },
+                { label: "Command", key: "command" as const, placeholder: "npx" },
+                { label: "Env key", key: "env_key" as const, placeholder: "MY_TOKEN (optional)" },
+              ].map(({ label, key, placeholder }) => (
+                <div key={key}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>{label}</label>
+                  <input style={inputStyle} value={form[key] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} />
+                </div>
+              ))}
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>Args</label>
+                <input style={inputStyle} value={argsInput} onChange={(e) => setArgsInput(e.target.value)} placeholder="-y @my-org/custom-server" />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>Token (optional)</label>
+                <input type="password" style={inputStyle} value={form.token ?? ""} onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))} />
+              </div>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={trustCheckbox}
+                  onChange={(e) => setTrustCheckbox(e.target.checked)}
+                  style={{ marginTop: 3 }}
+                />
+                <span style={{ fontSize: 12, color: "var(--fg-2)" }}>I trust this command to run on my machine</span>
+              </label>
+              {resolvedPath && (
+                <div style={{
+                  padding: 10, borderRadius: 6, background: "var(--bg-2)",
+                  fontSize: 11, fontFamily: "var(--mg-mono)", color: "var(--fg-3)",
+                }}>
+                  <div style={{ marginBottom: 4, fontWeight: 500, color: "var(--fg-2)" }}>Resolved path:</div>
+                  {resolvedPath}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="submit" disabled={!trustCheckbox} style={{ ...primaryBtn(), opacity: trustCheckbox ? 1 : 0.5, cursor: trustCheckbox ? "pointer" : "not-allowed" }}>Add</button>
+                <button type="button" onClick={() => setShowAdvanced(false)} style={ghostBtn()}>Back</button>
+                <button type="button" onClick={() => { setShowAdd(false); setShowAdvanced(false); }} style={ghostBtn()}>Cancel</button>
+              </div>
+            </form>
+          )}
+        </>
       )}
     </div>
   );
