@@ -46,8 +46,15 @@ pub async fn connect() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub async fn connect_server(server: &McpServer) -> Result<McpClient, McpError> {
-    let token = server.token.clone().unwrap_or_default();
     let env_key = server.env_key.clone().unwrap_or_default();
+
+    // Try to retrieve token from keychain if env_key is configured
+    let token = if !env_key.is_empty() {
+        crate::secrets::get_mcp_token(&server.id).unwrap_or(None)
+    } else {
+        None
+    };
+
     let client = ()
         .serve(
             TokioChildProcess::new(Command::new(&server.command).configure(
@@ -55,8 +62,11 @@ pub async fn connect_server(server: &McpServer) -> Result<McpClient, McpError> {
                     for arg in &server.args {
                         cmd.arg(arg);
                     }
-                    if !token.is_empty() && !env_key.is_empty() {
-                        cmd.env(&env_key, &token);
+                    // Only set env var if both token exists and env_key is configured
+                    if let Some(token_value) = &token {
+                        if !env_key.is_empty() {
+                            cmd.env(&env_key, token_value);
+                        }
                     }
                 },
             ))

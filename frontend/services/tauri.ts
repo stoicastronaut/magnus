@@ -35,10 +35,12 @@ export interface Chat {
 }
 
 export interface McpServer {
+  id: string;
   name: string;
+  display_name: string;
   command: string;
   args: string[];
-  env?: Record<string, string>;
+  env_key?: string;
 }
 
 // ── Provider helpers ───────────────────────────────────────────────────────
@@ -155,3 +157,11 @@ export const executeToolCall = (
     toolName,
     arguments: arguments_,
   });
+
+export const setMcpToken = (
+  serverId: string,
+  token: string
+): Promise<void> => invoke("set_mcp_token", { serverId, token });
+
+export const deleteMcpToken = (serverId: string): Promise<void> =>
+  invoke("delete_mcp_token", { serverId });

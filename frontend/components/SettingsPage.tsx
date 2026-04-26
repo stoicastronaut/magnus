@@ -19,6 +19,8 @@ import {
   getConnectedServers,
   listTools,
   providerDot,
+  setMcpToken,
+  deleteMcpToken,
 } from "../services/tauri";
 import ProviderEditModal from "./ProviderEditModal";
 
@@ -464,17 +466,24 @@ function ApiSection() {
 // ── MCP section ────────────────────────────────────────────────────────────
 
 interface McpServerLocal {
-  id?: string;
+  id: string;
   name: string;
   display_name: string;
   command: string;
   args: string[];
-  token?: string;
   env_key?: string;
   locally_created?: boolean;
 }
 
-const emptyForm = (): Partial<McpServerLocal> => ({ display_name: "", command: "", args: [], token: "", env_key: "" });
+interface FormState {
+  display_name: string;
+  command: string;
+  args: string[];
+  env_key: string;
+  token: string;
+}
+
+const emptyForm = (): FormState => ({ display_name: "", command: "", args: [], env_key: "", token: "" });
 
 function ServerGlyph({ name }: { name: string }) {
   return (
@@ -518,7 +527,7 @@ function McpSection() {
   const [connected, setConnected] = useState<string[]>([]);
   const [toolsByServer, setToolsByServer] = useState<Record<string, string[]>>({});
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<McpServerLocal>>(emptyForm());
+  const [form, setForm] = useState<FormState>(emptyForm());
   const [argsInput, setArgsInput] = useState("");
   const [status, setStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
@@ -557,6 +566,8 @@ function McpSection() {
 
   async function handleDelete(server: McpServerLocal) {
     if (connected.includes(server.name)) await handleDisconnect(server);
+    // Clean up token from keychain
+    await deleteMcpToken(server.id).catch(() => {});
     await persist(servers.filter((s) => s.name !== server.name));
   }
 
@@ -565,13 +576,20 @@ function McpSection() {
     if (!form.display_name || !form.command) return;
     const name = form.display_name.toLowerCase().replace(/\s+/g, "_");
     const server: McpServerLocal = {
-      id: crypto.randomUUID?.() || undefined,
-      name, display_name: form.display_name!,
-      command: form.command!, args: argsInput.split(" ").filter(Boolean),
-      token: form.token || undefined, env_key: form.env_key || undefined,
+      id: crypto.randomUUID(),
+      name,
+      display_name: form.display_name!,
+      command: form.command!,
+      args: argsInput.split(" ").filter(Boolean),
+      env_key: form.env_key || undefined,
       locally_created: true,
     };
+    // Save the server configuration (without token)
     await persist([...servers, server]);
+    // Save token to keychain if provided
+    if (form.token) {
+      await setMcpToken(server.id, form.token).catch(() => {});
+    }
     setForm(emptyForm()); setArgsInput(""); setShowAdd(false);
   }
 
@@ -668,6 +686,7 @@ function McpSection() {
                       setForm({
                         display_name: preset.display_name,
                         command: preset.command,
+                        args: preset.args,
                         env_key: "",
                         token: "",
                       });
@@ -731,8 +750,8 @@ function McpSection() {
                 <input style={inputStyle} value={argsInput} onChange={(e) => setArgsInput(e.target.value)} placeholder="-y @my-org/custom-server" />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>Token (optional)</label>
-                <input type="password" style={inputStyle} value={form.token ?? ""} onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))} />
+                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>Token (stored securely in keychain)</label>
+                <input type="password" style={inputStyle} value={form.token ?? ""} onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))} placeholder="Leave blank if already stored" />
               </div>
               <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
                 <input

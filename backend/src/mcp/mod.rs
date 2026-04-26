@@ -23,10 +23,36 @@ pub struct McpServer {
     pub display_name: String,
     pub command: String,
     pub args: Vec<String>,
-    pub token: Option<String>,
     pub env_key: Option<String>,
     #[serde(default)]
     pub locally_created: bool,
+}
+
+// Legacy struct for migration: includes token field that is no longer part of McpServer
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum LegacyOrNewServer {
+    Legacy {
+        id: Option<String>,
+        name: String,
+        display_name: String,
+        command: String,
+        args: Vec<String>,
+        token: Option<String>,
+        env_key: Option<String>,
+        #[serde(default)]
+        locally_created: bool,
+    },
+    New {
+        id: String,
+        name: String,
+        display_name: String,
+        command: String,
+        args: Vec<String>,
+        env_key: Option<String>,
+        #[serde(default)]
+        locally_created: bool,
+    },
 }
 
 pub struct McpPool {
@@ -59,7 +85,70 @@ pub fn load_servers(app_data_dir: &Path) -> Result<Vec<McpServer>, String> {
         return Ok(vec![]);
     }
     let json = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&json).map_err(|e| e.to_string())
+    let legacy: Vec<LegacyOrNewServer> =
+        serde_json::from_str(&json).map_err(|e| e.to_string())?;
+
+    let mut servers = Vec::new();
+    let mut migrated_count = 0;
+
+    for item in legacy {
+        match item {
+            LegacyOrNewServer::Legacy {
+                id,
+                name,
+                display_name,
+                command,
+                args,
+                token,
+                env_key,
+                locally_created,
+            } => {
+                let server_id = id.unwrap_or_else(default_server_id);
+                // Migrate token to keychain if present
+                if let Some(token_value) = token {
+                    let _ =
+                        crate::secrets::set_mcp_token(&server_id, &token_value);
+                    migrated_count += 1;
+                }
+                servers.push(McpServer {
+                    id: server_id,
+                    name,
+                    display_name,
+                    command,
+                    args,
+                    env_key,
+                    locally_created,
+                });
+            }
+            LegacyOrNewServer::New {
+                id,
+                name,
+                display_name,
+                command,
+                args,
+                env_key,
+                locally_created,
+            } => {
+                servers.push(McpServer {
+                    id,
+                    name,
+                    display_name,
+                    command,
+                    args,
+                    env_key,
+                    locally_created,
+                });
+            }
+        }
+    }
+
+    // If we migrated any tokens, rewrite the file without them
+    if migrated_count > 0 {
+        eprintln!("[MCP] Migrated {} MCP tokens to keychain", migrated_count);
+        save_servers(app_data_dir, &servers)?;
+    }
+
+    Ok(servers)
 }
 
 #[cfg(test)]
@@ -74,7 +163,6 @@ mod tests {
             display_name: name.to_string(),
             command: "npx".to_string(),
             args: vec!["-y".to_string(), "some-server".to_string()],
-            token: Some("tok".to_string()),
             env_key: Some("MY_TOKEN".to_string()),
             locally_created: true,
         }
@@ -109,12 +197,53 @@ mod tests {
     fn test_roundtrip_preserves_fields() {
         let dir = tempdir().unwrap();
         let server = make_server("github");
+        let original_id = server.id.clone();
         save_servers(dir.path(), std::slice::from_ref(&server)).unwrap();
         let loaded = load_servers(dir.path()).unwrap();
         assert_eq!(loaded[0].command, "npx");
         assert_eq!(loaded[0].args, vec!["-y", "some-server"]);
-        assert_eq!(loaded[0].token.as_deref(), Some("tok"));
         assert_eq!(loaded[0].env_key.as_deref(), Some("MY_TOKEN"));
+        assert_eq!(loaded[0].id, original_id);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_legacy_migration_moves_token_to_keychain() {
+        let dir = tempdir().unwrap();
+        let server_id = uuid::Uuid::new_v4().to_string();
+
+        // Create a legacy JSON with token field
+        let legacy_json = serde_json::json!([{
+            "id": server_id,
+            "name": "github",
+            "display_name": "GitHub",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "token": "secret-token-value",
+            "env_key": "GITHUB_TOKEN"
+        }]);
+
+        let path = dir.path().join("mcp_servers.json");
+        std::fs::write(&path, legacy_json.to_string())
+            .expect("Failed to write legacy JSON");
+
+        // Load the servers (should trigger migration)
+        let loaded = load_servers(dir.path()).expect("Failed to load servers");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "github");
+        // Token should not be in the loaded server anymore
+        // Verify it was moved to keychain
+        let token_in_keychain = crate::secrets::get_mcp_token(&server_id)
+            .expect("Failed to get token from keychain");
+        assert_eq!(token_in_keychain, Some("secret-token-value".to_string()));
+
+        // Verify the file was rewritten without the token
+        let rewritten_json = std::fs::read_to_string(&path)
+            .expect("Failed to read rewritten JSON");
+        assert!(!rewritten_json.contains("secret-token-value"));
+
+        // Cleanup
+        let _ = crate::secrets::delete_mcp_token(&server_id);
     }
 
     #[test]

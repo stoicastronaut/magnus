@@ -215,6 +215,16 @@ fn load_mcp_servers(
 }
 
 #[tauri::command]
+fn set_mcp_token(server_id: String, token: String) -> Result<(), String> {
+    secrets::set_mcp_token(&server_id, &token)
+}
+
+#[tauri::command]
+fn delete_mcp_token(server_id: String) -> Result<(), String> {
+    secrets::delete_mcp_token(&server_id)
+}
+
+#[tauri::command]
 async fn disconnect_server(
     pool: tauri::State<'_, mcp::McpPool>,
     server_name: String,
@@ -713,6 +723,8 @@ pub fn run() {
             execute_tool_call,
             save_mcp_servers,
             load_mcp_servers,
+            set_mcp_token,
+            delete_mcp_token,
             disconnect_server,
             get_connected_servers,
             set_tool_trust,
