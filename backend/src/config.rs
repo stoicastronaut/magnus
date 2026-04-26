@@ -32,6 +32,7 @@ pub enum ProviderType {
 #[serde(rename_all = "snake_case")]
 pub enum BuiltInId {
     Anthropic,
+    #[serde(rename = "open_ai")]
     OpenAI,
     Google,
 }
@@ -40,6 +41,7 @@ pub enum BuiltInId {
 #[serde(rename_all = "snake_case")]
 pub enum Protocol {
     Anthropic,
+    #[serde(rename = "open_ai")]
     OpenAI,
     Google,
 }
@@ -68,10 +70,31 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    fn built_in_provider() -> ProviderConfig {
+        ProviderConfig {
+            id: "anthropic".to_string(),
+            display_name: "Anthropic".to_string(),
+            _type: ProviderType::BuiltIn {
+                which: BuiltInId::Anthropic,
+            },
+        }
+    }
+
+    fn custom_provider() -> ProviderConfig {
+        ProviderConfig {
+            id: "corp-openai".to_string(),
+            display_name: "Corp OpenAI".to_string(),
+            _type: ProviderType::Custom {
+                protocol: Protocol::OpenAI,
+                base_url: "https://proxy.example.com/v1/".to_string(),
+            },
+        }
+    }
+
     fn make_settings() -> Settings {
         Settings {
-            api_key: "sk-test-key".to_string(),
-            base_url: "https://api.anthropic.com".to_string(),
+            default_provider_id: Some("anthropic".to_string()),
+            providers: vec![built_in_provider(), custom_provider()],
         }
     }
 
@@ -89,8 +112,17 @@ mod tests {
         let settings = make_settings();
         settings.save(dir.path()).unwrap();
         let loaded = Settings::load(dir.path()).unwrap();
-        assert_eq!(loaded.base_url, settings.base_url);
-        assert_eq!(loaded.api_key, settings.api_key);
+        assert_eq!(loaded.default_provider_id, settings.default_provider_id);
+        assert_eq!(loaded.providers.len(), 2);
+        assert_eq!(loaded.providers[0].id, "anthropic");
+        assert_eq!(loaded.providers[1].display_name, "Corp OpenAI");
+        assert_eq!(
+            loaded.providers[1]._type,
+            ProviderType::Custom {
+                protocol: Protocol::OpenAI,
+                base_url: "https://proxy.example.com/v1/".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -101,9 +133,17 @@ mod tests {
     }
 
     #[test]
-    fn test_default_settings() {
-        let settings = Settings::default();
-        assert_eq!(settings.api_key, String::new());
-        assert_eq!(settings.base_url, "https://api.anthropic.com");
+    fn test_serialization_uses_kind_tagged_provider_shape() {
+        let settings = make_settings();
+        let json = serde_json::to_value(&settings).unwrap();
+
+        assert_eq!(json["providers"][0]["kind"], "built_in");
+        assert_eq!(json["providers"][0]["which"], "anthropic");
+        assert_eq!(json["providers"][1]["kind"], "custom");
+        assert_eq!(json["providers"][1]["protocol"], "open_ai");
+        assert_eq!(
+            json["providers"][1]["base_url"],
+            "https://proxy.example.com/v1/"
+        );
     }
 }
