@@ -12,14 +12,26 @@ export default function ModelPicker({ provider, value, onChange, disabled }: Pro
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const providerId = provider?.id ?? null;
 
   useEffect(() => {
-    if (!provider) { setModels([]); return; }
-    listModels(provider.id).then((ms) => {
-      setModels(ms);
-      if (ms.length > 0 && !value) onChange(ms[0].id);
-    });
-  }, [provider?.id]);
+    if (!providerId) return;
+
+    let cancelled = false;
+    listModels(providerId)
+      .then((ms) => {
+        if (cancelled) return;
+        setModels(ms);
+        if (ms.length > 0 && !value) onChange(ms[0].id);
+      })
+      .catch(() => {
+        if (!cancelled) setModels([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onChange, providerId, value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -29,7 +41,10 @@ export default function ModelPicker({ provider, value, onChange, disabled }: Pro
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const current = models.find((m) => m.id === value) ?? models[0];
+  const visibleModels = providerId ? models : [];
+  const current = providerId
+    ? visibleModels.find((m) => m.id === value) ?? visibleModels[0]
+    : undefined;
   const dot = provider ? providerDot(provider) : "var(--fg-3)";
 
   return (
@@ -56,7 +71,7 @@ export default function ModelPicker({ provider, value, onChange, disabled }: Pro
         </svg>
       </button>
 
-      {open && models.length > 0 && (
+      {open && providerId && visibleModels.length > 0 && (
         <div style={{
           position: "absolute", bottom: "calc(100% + 6px)", left: 0,
           background: "var(--bg-2)", border: "1px solid var(--line)",
@@ -64,7 +79,7 @@ export default function ModelPicker({ provider, value, onChange, disabled }: Pro
           boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
           minWidth: 200, zIndex: 50,
         }}>
-          {models.map((m) => (
+          {visibleModels.map((m) => (
             <button
               key={m.id}
               onClick={() => { onChange(m.id); setOpen(false); }}

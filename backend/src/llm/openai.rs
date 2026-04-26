@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use tauri::Emitter;
 
-use crate::chats::Message;
 use super::LlmError;
+use crate::chats::Message;
 
 pub struct OpenAIClient {
     base_url: String,
@@ -12,8 +12,16 @@ pub struct OpenAIClient {
 }
 
 impl OpenAIClient {
-    pub fn new(base_url: String, api_key: String, http: reqwest::Client) -> Self {
-        Self { base_url, api_key, http }
+    pub fn new(
+        base_url: String,
+        api_key: String,
+        http: reqwest::Client,
+    ) -> Self {
+        Self {
+            base_url,
+            api_key,
+            http,
+        }
     }
 }
 
@@ -36,7 +44,8 @@ impl super::LlmClient for OpenAIClient {
             "messages": json_messages,
         });
 
-        let response = self.http
+        let response = self
+            .http
             .post(format!("{}chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&body)
@@ -57,10 +66,13 @@ impl super::LlmClient for OpenAIClient {
                 if data == "[DONE]" {
                     continue;
                 }
-                let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else {
+                let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                else {
                     continue;
                 };
-                if let Some(token) = json["choices"][0]["delta"]["content"].as_str() {
+                if let Some(token) =
+                    json["choices"][0]["delta"]["content"].as_str()
+                {
                     if !token.is_empty() {
                         full_text.push_str(token);
                         app.emit("stream-token", token).unwrap();
@@ -84,8 +96,10 @@ impl super::LlmClient for OpenAIClient {
             .filter_map(|m| {
                 Some(crate::chats::Message {
                     role: m["role"].as_str()?.to_string(),
-                    content: m["content"][0]["text"].as_str()
-                        .or_else(|| m["content"].as_str())?.to_string(),
+                    content: m["content"][0]["text"]
+                        .as_str()
+                        .or_else(|| m["content"].as_str())?
+                        .to_string(),
                     model_id: None,
                 })
             })
@@ -111,7 +125,8 @@ impl super::LlmClient for OpenAIClient {
             }]
         });
 
-        let response = self.http
+        let response = self
+            .http
             .post(format!("{}chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&body)
@@ -119,7 +134,9 @@ impl super::LlmClient for OpenAIClient {
             .await?;
 
         let json: serde_json::Value = response.json().await?;
-        let text = json["choices"][0]["message"]["content"].as_str().unwrap_or("New chat");
+        let text = json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("New chat");
         Ok(text.trim_matches('"').trim().to_string())
     }
 }

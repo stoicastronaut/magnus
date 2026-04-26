@@ -19,17 +19,30 @@ pub struct ProviderConfig {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProviderType {
-    BuiltIn { which: BuiltInId },
-    Custom { protocol: Protocol, base_url: String},
+    BuiltIn {
+        which: BuiltInId,
+    },
+    Custom {
+        protocol: Protocol,
+        base_url: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum BuiltInId { Anthropic, OpenAI, Google }
+pub enum BuiltInId {
+    Anthropic,
+    OpenAI,
+    Google,
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Protocol { Anthropic, OpenAI, Google }
+pub enum Protocol {
+    Anthropic,
+    OpenAI,
+    Google,
+}
 
 impl Settings {
     pub fn save(&self, app_data_dir: &Path) -> Result<(), String> {

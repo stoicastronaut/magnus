@@ -22,16 +22,19 @@ fn upsert_provider(
     api_key: Option<String>,
 ) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let mut settings = config::Settings::load(&app_data_dir).unwrap_or(config::Settings {
-        default_provider_id: None,
-        providers: vec![],
-    });
+    let mut settings =
+        config::Settings::load(&app_data_dir).unwrap_or(config::Settings {
+            default_provider_id: None,
+            providers: vec![],
+        });
     if let Some(key) = api_key {
         if !key.is_empty() {
             secrets::set_api_key(&provider.id, &key)?;
         }
     }
-    if let Some(pos) = settings.providers.iter().position(|p| p.id == provider.id) {
+    if let Some(pos) =
+        settings.providers.iter().position(|p| p.id == provider.id)
+    {
         settings.providers[pos] = provider;
     } else {
         if settings.default_provider_id.is_none() {
@@ -43,24 +46,33 @@ fn upsert_provider(
 }
 
 #[tauri::command]
-fn delete_provider(app: tauri::AppHandle, provider_id: String) -> Result<(), String> {
+fn delete_provider(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let mut settings = config::Settings::load(&app_data_dir)?;
     if settings.default_provider_id.as_deref() == Some(&provider_id)
         && settings.providers.len() > 1
     {
-        return Err("Set a new default provider before deleting this one.".into());
+        return Err(
+            "Set a new default provider before deleting this one.".into()
+        );
     }
     settings.providers.retain(|p| p.id != provider_id);
     if settings.default_provider_id.as_deref() == Some(&provider_id) {
-        settings.default_provider_id = settings.providers.first().map(|p| p.id.clone());
+        settings.default_provider_id =
+            settings.providers.first().map(|p| p.id.clone());
     }
     let _ = secrets::delete_api_key(&provider_id);
     settings.save(&app_data_dir)
 }
 
 #[tauri::command]
-fn set_default_provider(app: tauri::AppHandle, provider_id: String) -> Result<(), String> {
+fn set_default_provider(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let mut settings = config::Settings::load(&app_data_dir)?;
     if !settings.providers.iter().any(|p| p.id == provider_id) {
@@ -151,7 +163,9 @@ fn save_mcp_servers(
 }
 
 #[tauri::command]
-fn load_mcp_servers(app: tauri::AppHandle) -> Result<Vec<mcp::McpServer>, String> {
+fn load_mcp_servers(
+    app: tauri::AppHandle,
+) -> Result<Vec<mcp::McpServer>, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     mcp::load_servers(&app_data_dir)
 }
@@ -181,7 +195,12 @@ async fn stream_message(
     model_id: String,
     messages: Vec<Message>,
 ) -> Result<(), String> {
-    eprintln!("[stream_message] called provider_id={} model_id={} message_count={}", provider_id, model_id, messages.len());
+    eprintln!(
+        "[stream_message] called provider_id={} model_id={} message_count={}",
+        provider_id,
+        model_id,
+        messages.len()
+    );
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let settings = config::Settings::load(&app_data_dir)?;
     let provider = settings
@@ -214,10 +233,12 @@ async fn stream_message(
 
     let mut json_messages: Vec<serde_json::Value> = messages
         .iter()
-        .map(|m| serde_json::json!({
-            "role": m.role,
-            "content": [{"type": "text", "text": m.content}]
-        }))
+        .map(|m| {
+            serde_json::json!({
+                "role": m.role,
+                "content": [{"type": "text", "text": m.content}]
+            })
+        })
         .collect();
 
     loop {
@@ -229,7 +250,11 @@ async fn stream_message(
                 eprintln!("[stream_message] stream_raw error: {}", e);
                 e.to_string()
             })?;
-        eprintln!("[stream_message] stream_raw returned {} blocks, {} tool_uses", assistant_blocks.len(), tool_uses.len());
+        eprintln!(
+            "[stream_message] stream_raw returned {} blocks, {} tool_uses",
+            assistant_blocks.len(),
+            tool_uses.len()
+        );
 
         json_messages.push(serde_json::json!({
             "role": "assistant",
@@ -243,11 +268,16 @@ async fn stream_message(
         let guard = pool.connections.lock().await;
         let mut tool_results = Vec::new();
         for tool_use in &tool_uses {
-            app.emit("tool-call", serde_json::json!({ "name": tool_use.name })).unwrap();
+            app.emit("tool-call", serde_json::json!({ "name": tool_use.name }))
+                .unwrap();
             let mut result_content = "Tool not found".to_string();
             for mcp_client in guard.values() {
-                if let Ok(result) =
-                    mcp::call_tool(mcp_client, &tool_use.name, tool_use.input.clone()).await
+                if let Ok(result) = mcp::call_tool(
+                    mcp_client,
+                    &tool_use.name,
+                    tool_use.input.clone(),
+                )
+                .await
                 {
                     result_content = result;
                     break;
@@ -302,7 +332,10 @@ async fn rename_chat(
         .generate_title(&chat.messages, &model_id)
         .await
         .map_err(|e| e.to_string())?;
-    let updated_chat = Chat { name: chat_name.clone(), ..chat };
+    let updated_chat = Chat {
+        name: chat_name.clone(),
+        ..chat
+    };
     updated_chat.save(&chats_dir)?;
     Ok(chat_name)
 }
