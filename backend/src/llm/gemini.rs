@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use tauri::Emitter;
 
-use crate::chats::Message;
 use super::LlmError;
+use crate::chats::Message;
 
 pub struct GeminiClient {
     base_url: String,
@@ -12,12 +12,24 @@ pub struct GeminiClient {
 }
 
 impl GeminiClient {
-    pub fn new(base_url: String, api_key: String, http: reqwest::Client) -> Self {
-        Self { base_url, api_key, http }
+    pub fn new(
+        base_url: String,
+        api_key: String,
+        http: reqwest::Client,
+    ) -> Self {
+        Self {
+            base_url,
+            api_key,
+            http,
+        }
     }
 
     fn to_gemini_role(role: &str) -> &str {
-        if role == "assistant" { "model" } else { role }
+        if role == "assistant" {
+            "model"
+        } else {
+            role
+        }
     }
 }
 
@@ -31,15 +43,18 @@ impl super::LlmClient for GeminiClient {
     ) -> Result<String, LlmError> {
         let contents: Vec<serde_json::Value> = messages
             .iter()
-            .map(|m| serde_json::json!({
-                "role": Self::to_gemini_role(&m.role),
-                "parts": [{"text": m.content}]
-            }))
+            .map(|m| {
+                serde_json::json!({
+                    "role": Self::to_gemini_role(&m.role),
+                    "parts": [{"text": m.content}]
+                })
+            })
             .collect();
 
         let body = serde_json::json!({ "contents": contents });
 
-        let response = self.http
+        let response = self
+            .http
             .post(format!(
                 "{}models/{}:streamGenerateContent?alt=sse&key={}",
                 self.base_url, model_id, self.api_key
@@ -59,10 +74,14 @@ impl super::LlmClient for GeminiClient {
                     continue;
                 }
                 let data = line.trim_start_matches("data: ");
-                let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else {
+                let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                else {
                     continue;
                 };
-                if let Some(token) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+                if let Some(token) = json["candidates"][0]["content"]["parts"]
+                    [0]["text"]
+                    .as_str()
+                {
                     if !token.is_empty() {
                         full_text.push_str(token);
                         app.emit("stream-token", token).unwrap();
@@ -86,8 +105,10 @@ impl super::LlmClient for GeminiClient {
             .filter_map(|m| {
                 Some(Message {
                     role: m["role"].as_str()?.to_string(),
-                    content: m["content"][0]["text"].as_str()
-                        .or_else(|| m["content"].as_str())?.to_string(),
+                    content: m["content"][0]["text"]
+                        .as_str()
+                        .or_else(|| m["content"].as_str())?
+                        .to_string(),
                     model_id: None,
                 })
             })
@@ -112,7 +133,8 @@ impl super::LlmClient for GeminiClient {
             }]
         });
 
-        let response = self.http
+        let response = self
+            .http
             .post(format!(
                 "{}models/{}:generateContent?key={}",
                 self.base_url, model_id, self.api_key

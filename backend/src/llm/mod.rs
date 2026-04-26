@@ -51,29 +51,44 @@ pub trait LlmClient: Send + Sync {
     ) -> Result<(Vec<serde_json::Value>, Vec<ToolUse>), LlmError>;
 }
 
-pub fn client_for(provider: &ProviderConfig, api_key: String, http: reqwest::Client) -> Box<dyn LlmClient> {
+pub fn client_for(
+    provider: &ProviderConfig,
+    api_key: String,
+    http: reqwest::Client,
+) -> Box<dyn LlmClient> {
     match &provider._type {
-        ProviderType::BuiltIn { which: BuiltInId::Anthropic } => Box::new(
-            AnthropicClient::new("https://api.anthropic.com/".into(), api_key, http),
-        ),
-        ProviderType::BuiltIn { which: BuiltInId::OpenAI } => Box::new(
-            OpenAIClient::new("https://api.openai.com/v1/".into(), api_key, http),
-        ),
-        ProviderType::BuiltIn { which: BuiltInId::Google } => Box::new(
-            GeminiClient::new(
-                "https://generativelanguage.googleapis.com/v1beta/".into(),
-                api_key,
-                http,
-            ),
-        ),
-        ProviderType::Custom { protocol: Protocol::Anthropic, base_url } => {
-            Box::new(AnthropicClient::new(base_url.clone(), api_key, http))
-        }
-        ProviderType::Custom { protocol: Protocol::OpenAI, base_url } => {
-            Box::new(OpenAIClient::new(base_url.clone(), api_key, http))
-        }
-        ProviderType::Custom { protocol: Protocol::Google, base_url } => {
-            Box::new(GeminiClient::new(base_url.clone(), api_key, http))
-        }
+        ProviderType::BuiltIn {
+            which: BuiltInId::Anthropic,
+        } => Box::new(AnthropicClient::new(
+            "https://api.anthropic.com/".into(),
+            api_key,
+            http,
+        )),
+        ProviderType::BuiltIn {
+            which: BuiltInId::OpenAI,
+        } => Box::new(OpenAIClient::new(
+            "https://api.openai.com/v1/".into(),
+            api_key,
+            http,
+        )),
+        ProviderType::BuiltIn {
+            which: BuiltInId::Google,
+        } => Box::new(GeminiClient::new(
+            "https://generativelanguage.googleapis.com/v1beta/".into(),
+            api_key,
+            http,
+        )),
+        ProviderType::Custom {
+            protocol: Protocol::Anthropic,
+            base_url,
+        } => Box::new(AnthropicClient::new(base_url.clone(), api_key, http)),
+        ProviderType::Custom {
+            protocol: Protocol::OpenAI,
+            base_url,
+        } => Box::new(OpenAIClient::new(base_url.clone(), api_key, http)),
+        ProviderType::Custom {
+            protocol: Protocol::Google,
+            base_url,
+        } => Box::new(GeminiClient::new(base_url.clone(), api_key, http)),
     }
 }

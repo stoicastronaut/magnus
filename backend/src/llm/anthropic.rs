@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use tauri::Emitter;
 
-use crate::chats::Message;
 use super::{LlmError, ToolUse};
+use crate::chats::Message;
 
 struct SseState {
     current_text: String,
@@ -49,8 +49,9 @@ impl SseState {
                         None
                     }
                     Some("input_json_delta") => {
-                        self.current_tool_input
-                            .push_str(delta["partial_json"].as_str().unwrap_or(""));
+                        self.current_tool_input.push_str(
+                            delta["partial_json"].as_str().unwrap_or(""),
+                        );
                         None
                     }
                     _ => None,
@@ -66,8 +67,9 @@ impl SseState {
                 }
                 if !self.current_tool_input.is_empty() {
                     if let Some(tool) = self.tool_uses.last_mut() {
-                        tool.input = serde_json::from_str(&self.current_tool_input)
-                            .unwrap_or(serde_json::Value::Null);
+                        tool.input =
+                            serde_json::from_str(&self.current_tool_input)
+                                .unwrap_or(serde_json::Value::Null);
                         self.content_blocks.push(serde_json::json!({
                             "type": "tool_use",
                             "id": tool.id,
@@ -91,8 +93,16 @@ pub struct AnthropicClient {
 }
 
 impl AnthropicClient {
-    pub fn new(base_url: String, api_key: String, http: reqwest::Client) -> Self {
-        Self { base_url, api_key, http }
+    pub fn new(
+        base_url: String,
+        api_key: String,
+        http: reqwest::Client,
+    ) -> Self {
+        Self {
+            base_url,
+            api_key,
+            http,
+        }
     }
 }
 
@@ -108,7 +118,8 @@ impl super::LlmClient for AnthropicClient {
             .iter()
             .map(|m| serde_json::json!({"role": m.role, "content": [{"type": "text", "text": m.content}]}))
             .collect();
-        let (blocks, _) = self.stream_raw(app, &json_messages, &[], model_id).await?;
+        let (blocks, _) =
+            self.stream_raw(app, &json_messages, &[], model_id).await?;
         let text = blocks
             .iter()
             .filter(|b| b["type"] == "text")
@@ -135,7 +146,8 @@ impl super::LlmClient for AnthropicClient {
             }]
         });
 
-        let response = self.http
+        let response = self
+            .http
             .post(format!("{}v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -167,7 +179,8 @@ impl super::LlmClient for AnthropicClient {
 
         let url = format!("{}v1/messages", self.base_url);
         eprintln!("[anthropic.stream_raw] POST {}", url);
-        let response = self.http
+        let response = self
+            .http
             .post(&url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -180,7 +193,10 @@ impl super::LlmClient for AnthropicClient {
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
             eprintln!("[anthropic.stream_raw] error body: {}", body);
-            return Err(super::LlmError::Api(format!("HTTP {}: {}", status, body)));
+            return Err(super::LlmError::Api(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let mut stream = response.bytes_stream();
@@ -191,7 +207,11 @@ impl super::LlmClient for AnthropicClient {
             let chunk = chunk?;
             chunk_count += 1;
             let text = String::from_utf8_lossy(&chunk);
-            eprintln!("[anthropic.stream_raw] chunk {} ({} bytes)", chunk_count, chunk.len());
+            eprintln!(
+                "[anthropic.stream_raw] chunk {} ({} bytes)",
+                chunk_count,
+                chunk.len()
+            );
             for line in text.lines() {
                 if !line.starts_with("data: ") {
                     continue;
@@ -200,11 +220,15 @@ impl super::LlmClient for AnthropicClient {
                 if data == "[DONE]" {
                     continue;
                 }
-                let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else {
+                let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                else {
                     continue;
                 };
                 if let Some(token) = state.process_event(&json) {
-                    eprintln!("[anthropic.stream_raw] emitting token: {:?}", token);
+                    eprintln!(
+                        "[anthropic.stream_raw] emitting token: {:?}",
+                        token
+                    );
                     app.emit("stream-token", token).unwrap();
                 }
             }

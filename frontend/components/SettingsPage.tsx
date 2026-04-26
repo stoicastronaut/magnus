@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BUILT_IN_PROVIDERS,
   BuiltInId,
@@ -179,9 +179,27 @@ function ApiSection() {
   const [modal, setModal] = useState<ModalState>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const settingsRef = useRef<Settings | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+
+  const selectProvider = useCallback(async (id: string, s?: Settings) => {
+    selectedIdRef.current = id;
+    setSelectedId(id);
+    setApiKeyInput("");
+    setError(null);
+    const src = s ?? settingsRef.current;
+    const p = src?.providers.find((x) => x.id === id);
+    if (!p) return;
+    if (p.kind === "custom") setBaseUrlInput(p.base_url);
+    else setBaseUrlInput("");
+    const ms = await listModels(id).catch(() => [] as ModelInfo[]);
+    setModels(ms);
+    setDefaultModel(ms[0]?.id ?? "");
+  }, []);
 
   const reload = useCallback(async () => {
     const s = await getSettings();
+    settingsRef.current = s;
     setSettings(s);
     const checks: Record<string, boolean> = {};
     await Promise.all(s.providers.map(async (p) => {
@@ -195,26 +213,22 @@ function ApiSection() {
       }
       return merged;
     });
-    if (!selectedId && s.providers.length > 0) {
-      selectProvider(s.providers[0].id, s);
+    if (!selectedIdRef.current && s.providers.length > 0) {
+      await selectProvider(s.providers[0].id, s);
     }
+  }, [selectProvider]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
   }, [selectedId]);
 
-  useEffect(() => { reload(); }, []);
-
-  const selectProvider = async (id: string, s?: Settings) => {
-    setSelectedId(id);
-    setApiKeyInput("");
-    setError(null);
-    const src = s ?? settings;
-    const p = src?.providers.find((x) => x.id === id);
-    if (!p) return;
-    if (p.kind === "custom") setBaseUrlInput(p.base_url);
-    else setBaseUrlInput("");
-    const ms = await listModels(id).catch(() => [] as ModelInfo[]);
-    setModels(ms);
-    setDefaultModel(ms[0]?.id ?? "");
-  };
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   const handleSave = async () => {
     if (!selectedId || !settings) return;
@@ -246,6 +260,7 @@ function ApiSection() {
     if (!selectedId) return;
     setError(null);
     try {
+      selectedIdRef.current = null;
       await deleteProvider(selectedId);
       setSelectedId(null);
       await reload();
