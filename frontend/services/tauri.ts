@@ -5,15 +5,10 @@ import { invoke } from "@tauri-apps/api/core";
 export type BuiltInId = "anthropic" | "open_ai" | "google";
 export type Protocol = "anthropic" | "open_ai" | "google";
 
-export type ProviderType =
+export type ProviderConfig = { id: string; display_name: string } & (
   | { kind: "built_in"; which: BuiltInId }
-  | { kind: "custom"; protocol: Protocol; base_url: string };
-
-export interface ProviderConfig {
-  id: string;
-  display_name: string;
-  _type: ProviderType;
-}
+  | { kind: "custom"; protocol: Protocol; base_url: string }
+);
 
 export interface ModelInfo {
   id: string;
@@ -75,9 +70,8 @@ export const BUILT_IN_PROVIDERS: Array<{
 ];
 
 export function providerDot(provider: ProviderConfig): string {
-  const t = provider._type;
-  if (t.kind === "built_in") {
-    return BUILT_IN_PROVIDERS.find((p) => p.which === t.which)?.dot ?? "var(--fg-3)";
+  if (provider.kind === "built_in") {
+    return BUILT_IN_PROVIDERS.find((p) => p.which === provider.which)?.dot ?? "var(--fg-3)";
   }
   return "var(--fg-3)";
 }

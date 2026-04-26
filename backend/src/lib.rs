@@ -181,6 +181,7 @@ async fn stream_message(
     model_id: String,
     messages: Vec<Message>,
 ) -> Result<(), String> {
+    eprintln!("[stream_message] called provider_id={} model_id={} message_count={}", provider_id, model_id, messages.len());
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let settings = config::Settings::load(&app_data_dir)?;
     let provider = settings
@@ -188,7 +189,9 @@ async fn stream_message(
         .iter()
         .find(|p| p.id == provider_id)
         .ok_or_else(|| format!("Provider '{}' not found.", provider_id))?;
+    eprintln!("[stream_message] found provider: {:?}", provider);
     let api_key = secrets::get_api_key(&provider_id)?;
+    eprintln!("[stream_message] got api key (len={})", api_key.len());
     let http = reqwest::Client::new();
     let client = llm::client_for(provider, api_key, http);
 
@@ -218,10 +221,15 @@ async fn stream_message(
         .collect();
 
     loop {
+        eprintln!("[stream_message] calling client.stream_raw");
         let (assistant_blocks, tool_uses) = client
             .stream_raw(&app, &json_messages, &tools, &model_id)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                eprintln!("[stream_message] stream_raw error: {}", e);
+                e.to_string()
+            })?;
+        eprintln!("[stream_message] stream_raw returned {} blocks, {} tool_uses", assistant_blocks.len(), tool_uses.len());
 
         json_messages.push(serde_json::json!({
             "role": "assistant",

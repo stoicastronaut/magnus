@@ -16,6 +16,7 @@ pub struct Chat {
     pub name: String,
     pub messages: Vec<Message>,
     pub created_at: String,
+    #[serde(default)]
     pub provider_id: String,
 }
 

@@ -187,7 +187,14 @@ function ApiSection() {
     await Promise.all(s.providers.map(async (p) => {
       checks[p.id] = await hasApiKey(p.id).catch(() => false);
     }));
-    setConnected(checks);
+    // Merge: keep optimistic `true` even if hasApiKey returned false (macOS keychain access can fail intermittently for unsigned dev builds)
+    setConnected((prev) => {
+      const merged: Record<string, boolean> = {};
+      for (const p of s.providers) {
+        merged[p.id] = checks[p.id] || prev[p.id] || false;
+      }
+      return merged;
+    });
     if (!selectedId && s.providers.length > 0) {
       selectProvider(s.providers[0].id, s);
     }
@@ -202,7 +209,7 @@ function ApiSection() {
     const src = s ?? settings;
     const p = src?.providers.find((x) => x.id === id);
     if (!p) return;
-    if (p._type.kind === "custom") setBaseUrlInput(p._type.base_url);
+    if (p.kind === "custom") setBaseUrlInput(p.base_url);
     else setBaseUrlInput("");
     const ms = await listModels(id).catch(() => [] as ModelInfo[]);
     setModels(ms);
@@ -213,12 +220,23 @@ function ApiSection() {
     if (!selectedId || !settings) return;
     const provider = settings.providers.find((p) => p.id === selectedId);
     if (!provider) return;
-    setError(null); setSaving(true);
+    setError(null);
+    const trimmedKey = apiKeyInput.trim();
+    // If provider isn't configured yet, an API key is required
+    if (!connected[selectedId] && !trimmedKey) {
+      setError("Please enter an API key.");
+      return;
+    }
+    setSaving(true);
     try {
-      const updated: ProviderConfig = provider._type.kind === "custom"
-        ? { ...provider, _type: { ...provider._type, base_url: baseUrlInput } }
+      const updated: ProviderConfig = provider.kind === "custom"
+        ? { ...provider, base_url: baseUrlInput }
         : provider;
-      await upsertProvider(updated, apiKeyInput.trim() || null);
+      await upsertProvider(updated, trimmedKey || null);
+      if (trimmedKey) {
+        setConnected((c) => ({ ...c, [updated.id]: true }));
+      }
+      setApiKeyInput("");
       await reload();
     } catch (e) { setError(String(e)); }
     finally { setSaving(false); }
@@ -242,13 +260,14 @@ function ApiSection() {
 
   const selected = settings?.providers.find((p) => p.id === selectedId) ?? null;
   const isDefault = settings?.default_provider_id === selectedId;
-  const isLocal = selected?._type.kind === "custom";
+  const isCustom = selected?.kind === "custom";
 
   // All built-in IDs that are already configured
   const configuredBuiltIns = new Set(
     settings?.providers
-      .filter((p) => p._type.kind === "built_in")
-      .map((p) => (p._type as { which: BuiltInId }).which) ?? []
+      .filter((p) => p.kind === "built_in")
+      .map((p) => p.kind === "built_in" ? p.which : null)
+      .filter((x): x is BuiltInId => x !== null) ?? []
   );
 
   return (
@@ -257,8 +276,13 @@ function ApiSection() {
         <ProviderEditModal
           mode={modal}
           onClose={() => setModal(null)}
-          onSaved={async () => {
+          onSaved={async (providerId, hadKey) => {
+            if (hadKey) {
+              setConnected((c) => ({ ...c, [providerId]: true }));
+            }
             await reload();
+            // Auto-select the just-saved provider
+            await selectProvider(providerId);
             setModal(null);
           }}
         />
@@ -354,10 +378,10 @@ function ApiSection() {
 
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>
-              {isLocal ? "Endpoint" : "API key"}
+              API key
             </label>
             <input
-              type={isLocal ? "text" : "password"}
+              type="password"
               value={apiKeyInput}
               onChange={(e) => setApiKeyInput(e.target.value)}
               placeholder={connected[selectedId!] ? "•••••• (leave blank to keep current)" : "sk-…"}
@@ -365,16 +389,16 @@ function ApiSection() {
             />
           </div>
 
-          {!isLocal && (
+          {isCustom && (
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>
-                Base URL <span style={{ fontWeight: 400, color: "var(--fg-3)" }}>— override for proxies</span>
+                Base URL
               </label>
               <input
                 type="text"
                 value={baseUrlInput}
                 onChange={(e) => setBaseUrlInput(e.target.value)}
-                placeholder="https://api.anthropic.com"
+                placeholder="https://…"
                 style={inputStyle}
               />
             </div>

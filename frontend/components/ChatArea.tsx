@@ -149,8 +149,7 @@ export function ChatArea({
       modelId.startsWith("gemini") ? "google" : null;
     if (guessedBuiltIn) {
       const found = settings.providers.find((p) => {
-        const t = p._type;
-        return t.kind === "built_in" && t.which === guessedBuiltIn;
+        return p.kind === "built_in" && p.which === guessedBuiltIn;
       });
       if (found) return found;
     }
