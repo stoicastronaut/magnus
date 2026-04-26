@@ -18,7 +18,13 @@ function App() {
       <div style={{ display: view === "home" ? "contents" : "none" }}>
         <HomePage onSettings={() => setView("settings")} theme={theme} onToggleTheme={toggleTheme} />
       </div>
-      {view === "settings" && <SettingsPage onBack={() => setView("home")} />}
+      {view === "settings" && (
+        <SettingsPage
+          onBack={() => setView("home")}
+          theme={theme}
+          onThemeChange={setTheme}
+        />
+      )}
     </div>
   );
 }

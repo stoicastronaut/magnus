@@ -4,8 +4,8 @@ import { describe, it, expect, vi } from "vitest";
 import { Sidebar, Chat } from "../components/Sidebar";
 
 const chats: Chat[] = [
-  { id: "1", name: "First Chat", messages: [], created_at: "01-01-25" },
-  { id: "2", name: "Second Chat", messages: [], created_at: "02-01-25" },
+  { id: "1", name: "First Chat", messages: [], created_at: "01-01-25", provider_id: "anthropic" },
+  { id: "2", name: "Second Chat", messages: [], created_at: "02-01-25", provider_id: "anthropic" },
 ];
 
 const defaultProps = {

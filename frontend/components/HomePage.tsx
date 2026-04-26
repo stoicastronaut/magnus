@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Sidebar, Chat } from "./Sidebar";
+import { Sidebar } from "./Sidebar";
 import { ChatArea } from "./ChatArea";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface Settings {
-  api_key: string;
-  base_url: string;
-}
+import {
+  Chat,
+  Message,
+  Settings,
+  getSettings,
+  streamMessage,
+  saveChat,
+  renameChat,
+  loadChats,
+  deleteChat,
+} from "../services/tauri";
 
 interface HomePageProps {
   onSettings: () => void;
@@ -28,60 +28,67 @@ function formatDate(): string {
   return `${dd}-${mm}-${yy}`;
 }
 
-function newChat(): Chat {
-  return {
-    id: crypto.randomUUID(),
-    name: "New Chat",
-    messages: [],
-    created_at: formatDate(),
-  };
-}
-
 export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
 
+  // Derive the effective provider for the active chat
+  const effectiveProviderId = activeChat?.provider_id ||
+    settings?.default_provider_id || null;
+
+  const effectiveProvider = settings?.providers.find((p) => p.id === effectiveProviderId) ?? null;
+
   useEffect(() => {
-    invoke<Settings>("get_settings")
-      .then(setSettings)
+    getSettings()
+      .then((s) => setSettings(s))
       .catch(() => {});
 
-    invoke<Chat[]>("load_chats")
+    loadChats()
       .then((loaded) => {
         if (loaded.length === 0) {
-          const initial = newChat();
-          setChats([initial]);
-          setActiveChatId(initial.id);
-          invoke("save_chat", { chat: initial }).catch(() => {});
+          // Don't create a chat immediately — let the user start one
+          setChats([]);
+          setActiveChatId(null);
         } else {
           setChats(loaded);
           setActiveChatId(loaded[0].id);
         }
       })
       .catch(() => {
-        const initial = newChat();
-        setChats([initial]);
-        setActiveChatId(initial.id);
+        setChats([]);
+        setActiveChatId(null);
       });
   }, []);
 
+  function makeNewChat(providerId: string): Chat {
+    return {
+      id: crypto.randomUUID(),
+      name: "New Chat",
+      messages: [],
+      created_at: formatDate(),
+      provider_id: providerId,
+    };
+  }
+
   function handleNewChat() {
-    const chat = newChat();
+    const pid = settings?.default_provider_id ?? settings?.providers[0]?.id ?? "";
+    const chat = makeNewChat(pid);
     setChats((prev) => [...prev, chat]);
     setActiveChatId(chat.id);
-    invoke("save_chat", { chat }).catch(() => {});
+    saveChat(chat).catch(() => {});
   }
 
   function handleRename(id: string, name: string) {
     setChats((prev) => {
       const updated = prev.map((c) => c.id === id ? { ...c, name } : c);
       const chat = updated.find((c) => c.id === id);
-      if (chat) invoke("save_chat", { chat }).catch(() => {});
+      if (chat) saveChat(chat).catch(() => {});
       return updated;
     });
   }
@@ -94,11 +101,26 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
       }
       return remaining;
     });
-    invoke("delete_chat", { chat }).catch(() => {});
+    deleteChat(chat).catch(() => {});
+  }
+
+  function handleProviderChange(providerId: string) {
+    if (!activeChat || activeChat.messages.length > 0) return;
+    setChats((prev) => {
+      const updated = prev.map((c) => c.id === activeChat.id ? { ...c, provider_id: providerId } : c);
+      const chat = updated.find((c) => c.id === activeChat.id);
+      if (chat) saveChat(chat).catch(() => {});
+      return updated;
+    });
+    setSelectedModelId(null); // reset model when provider changes
   }
 
   async function handleSend() {
-    if (!input.trim() || loading || !settings || !activeChat) return;
+    if (!input.trim() || loading || !activeChat) return;
+
+    const pid = activeChat.provider_id || effectiveProviderId;
+    const mid = selectedModelId;
+    if (!pid || !mid) return;
 
     const isFirstMessage = activeChat.messages.length === 0;
 
@@ -112,7 +134,11 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
     setLoading(true);
 
     const assistantIndex = newMessages.length;
-    setChats((prev) => prev.map((c) => c.id === activeChatId ? { ...c, messages: [...newMessages, { role: "assistant", content: "" }] } : c));
+    setChats((prev) => prev.map((c) =>
+      c.id === activeChatId
+        ? { ...c, messages: [...newMessages, { role: "assistant", content: "", model_id: mid }] }
+        : c
+    ));
 
     let accumulated = "";
 
@@ -121,38 +147,32 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
         const updated = [...c.messages];
-        updated[assistantIndex] = { role: "assistant", content: accumulated };
+        updated[assistantIndex] = { role: "assistant", content: accumulated, model_id: mid };
         return { ...c, messages: updated };
       }));
     });
 
     try {
-      await invoke("stream_message", {
-        apiKey: settings.api_key,
-        baseUrl: settings.base_url,
-        messages: newMessages,
-      });
+      await streamMessage(pid, mid, newMessages);
 
       setChats((prev) => {
         const chat = prev.find((c) => c.id === activeChatId);
-        if (chat) invoke("save_chat", { chat }).catch(() => {});
+        if (chat) saveChat(chat).catch(() => {});
         return prev;
       });
 
       if (isFirstMessage) {
-        invoke<string>("rename_chat", {
-          apiKey: settings.api_key,
-          baseUrl: settings.base_url,
-          chat: { ...activeChat, messages: newMessages },
-        }).then((name) => {
-          setChats((prev) => prev.map((c) => c.id === activeChatId ? { ...c, name } : c));
-        }).catch(() => {});
+        renameChat(pid, mid, { ...activeChat, messages: newMessages })
+          .then((name) => {
+            setChats((prev) => prev.map((c) => c.id === activeChatId ? { ...c, name } : c));
+          })
+          .catch(() => {});
       }
     } catch (err) {
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
         const updated = [...c.messages];
-        updated[assistantIndex] = { role: "assistant", content: `Error: ${err}` };
+        updated[assistantIndex] = { role: "assistant", content: `Error: ${err}`, model_id: mid };
         return { ...c, messages: updated };
       }));
     } finally {
@@ -160,6 +180,8 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
       setLoading(false);
     }
   }
+
+  const hasProviders = (settings?.providers.length ?? 0) > 0;
 
   return (
     <main style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
@@ -176,7 +198,13 @@ export function HomePage({ onSettings, theme, onToggleTheme }: HomePageProps) {
         messages={activeChat?.messages ?? []}
         loading={loading}
         input={input}
-        hasSettings={!!settings}
+        hasProviders={hasProviders}
+        settings={settings}
+        activeChat={activeChat}
+        effectiveProvider={effectiveProvider}
+        selectedModelId={selectedModelId}
+        onModelChange={setSelectedModelId}
+        onProviderChange={handleProviderChange}
         onInputChange={setInput}
         onSend={handleSend}
         chatName={activeChat?.name}

@@ -1,0 +1,211 @@
+import { useState } from "react";
+import {
+  BUILT_IN_PROVIDERS,
+  BuiltInId,
+  Protocol,
+  ProviderConfig,
+  upsertProvider,
+} from "../services/tauri";
+
+type Mode =
+  | { type: "built_in"; which: BuiltInId; existing?: ProviderConfig }
+  | { type: "custom"; existing?: ProviderConfig };
+
+interface Props {
+  mode: Mode;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
+  const isCustom = mode.type === "custom";
+  const builtInMeta =
+    mode.type === "built_in"
+      ? BUILT_IN_PROVIDERS.find((p) => p.which === mode.which)
+      : null;
+
+  const [displayName, setDisplayName] = useState(
+    mode.existing?.display_name ?? builtInMeta?.display_name ?? ""
+  );
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState(() => {
+    if (mode.existing?._type.kind === "custom") return mode.existing._type.base_url;
+    return "";
+  });
+  const [protocol, setProtocol] = useState<Protocol>(() => {
+    if (mode.existing?._type.kind === "custom") return mode.existing._type.protocol;
+    return "anthropic";
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setError(null);
+    if (isCustom && !displayName.trim()) { setError("Display name is required."); return; }
+    if (isCustom && !baseUrl.trim()) { setError("Base URL is required."); return; }
+
+    const config: ProviderConfig = isCustom
+      ? {
+          id: mode.existing?.id ?? crypto.randomUUID(),
+          display_name: displayName.trim(),
+          _type: { kind: "custom", protocol, base_url: baseUrl.trim() },
+        }
+      : {
+          id: mode.which!,
+          display_name: builtInMeta!.display_name,
+          _type: { kind: "built_in", which: mode.which! },
+        };
+
+    setSaving(true);
+    try {
+      await upsertProvider(config, apiKey.trim() || null);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 440, background: "var(--bg-2)",
+          border: "1px solid var(--line)", borderRadius: 14,
+          padding: 28, display: "flex", flexDirection: "column", gap: 20,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {builtInMeta && (
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: builtInMeta.dot }} />
+          )}
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em" }}>
+            {mode.existing ? "Edit" : "Add"} {isCustom ? "custom provider" : builtInMeta?.display_name}
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              marginLeft: "auto", background: "none", border: "none",
+              color: "var(--fg-3)", cursor: "pointer", fontSize: 18, lineHeight: 1,
+            }}
+          >×</button>
+        </div>
+
+        {/* Custom: display name */}
+        {isCustom && (
+          <FormRow label="Display name">
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="My Proxy"
+              style={inputStyle}
+            />
+          </FormRow>
+        )}
+
+        {/* Custom: protocol */}
+        {isCustom && (
+          <FormRow label="Protocol">
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["anthropic", "open_ai", "google"] as Protocol[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setProtocol(p)}
+                  style={{
+                    padding: "6px 12px", borderRadius: 7,
+                    border: protocol === p ? "1px solid var(--brand)" : "1px solid var(--line)",
+                    background: protocol === p ? "color-mix(in oklch, var(--brand) 12%, var(--bg-2))" : "var(--bg-2)",
+                    color: protocol === p ? "var(--brand)" : "var(--fg-2)",
+                    fontFamily: "var(--mg-sans)", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                  }}
+                >
+                  {p === "open_ai" ? "OpenAI" : p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </div>
+          </FormRow>
+        )}
+
+        {/* Custom: base URL */}
+        {isCustom && (
+          <FormRow label="Base URL">
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://…"
+              style={inputStyle}
+            />
+          </FormRow>
+        )}
+
+        {/* API key */}
+        <FormRow label={isCustom ? "API key" : "API key"}>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={mode.existing ? "•••••• (leave blank to keep current)" : builtInMeta?.placeholder ?? "sk-…"}
+            style={inputStyle}
+          />
+        </FormRow>
+
+        {error && (
+          <div style={{ fontSize: 12, color: "oklch(0.65 0.18 25)", padding: "8px 12px", background: "color-mix(in oklch, oklch(0.65 0.18 25) 12%, transparent)", borderRadius: 7 }}>
+            {error}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", paddingTop: 4 }}>
+          <button onClick={onClose} style={ghostBtn}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={primaryBtn}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--fg-2)", marginBottom: 6 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "8px 11px",
+  borderRadius: 7, border: "1px solid var(--line)",
+  background: "var(--bg)", color: "var(--fg)",
+  fontFamily: "var(--mg-sans)", fontSize: 13,
+  boxSizing: "border-box", outline: "none",
+};
+
+const primaryBtn: React.CSSProperties = {
+  padding: "8px 16px", borderRadius: 7, border: "none",
+  background: "var(--brand)", color: "var(--on-brand)",
+  fontFamily: "var(--mg-sans)", fontSize: 13, fontWeight: 500, cursor: "pointer",
+};
+
+const ghostBtn: React.CSSProperties = {
+  padding: "8px 14px", borderRadius: 7,
+  background: "transparent", border: "1px solid var(--line)",
+  color: "var(--fg-2)", fontFamily: "var(--mg-sans)", fontSize: 13, cursor: "pointer",
+};
