@@ -4,18 +4,32 @@ use std::path::Path;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
-    pub api_key: String,
-    pub base_url: String,
+    pub default_provider_id: Option<String>,
+    pub providers: Vec<ProviderConfig>,
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Settings {
-            api_key: String::new(),
-            base_url: "https://api.anthropic.com".to_string(),
-        }
-    }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProviderConfig {
+    pub id: String,
+    pub display_name: String,
+    #[serde(flatten)]
+    pub _type: ProviderType,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all= "snake_case")]
+pub enum ProviderType {
+    BuiltIn { which: BuiltInId },
+    Custom { protocol: Protocol, base_url: String},
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BuiltInId { Anthropic, OpenAI, Google }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Protocol { Anthropic, OpenAI, Google }
 
 impl Settings {
     pub fn save(&self, app_data_dir: &Path) -> Result<(), String> {

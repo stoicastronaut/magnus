@@ -6,6 +6,8 @@ mod chats;
 mod config;
 mod llm;
 mod mcp;
+mod models;
+mod secrets;
 
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
@@ -14,14 +16,78 @@ fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
 }
 
 #[tauri::command]
-fn save_settings(
+fn upsert_provider(
     app: tauri::AppHandle,
-    api_key: String,
-    base_url: String,
+    provider: config::ProviderConfig,
+    api_key: Option<String>,
 ) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let settings = config::Settings { api_key, base_url };
+    let mut settings = config::Settings::load(&app_data_dir).unwrap_or(config::Settings {
+        default_provider_id: None,
+        providers: vec![],
+    });
+    if let Some(key) = api_key {
+        if !key.is_empty() {
+            secrets::set_api_key(&provider.id, &key)?;
+        }
+    }
+    if let Some(pos) = settings.providers.iter().position(|p| p.id == provider.id) {
+        settings.providers[pos] = provider;
+    } else {
+        if settings.default_provider_id.is_none() {
+            settings.default_provider_id = Some(provider.id.clone());
+        }
+        settings.providers.push(provider);
+    }
     settings.save(&app_data_dir)
+}
+
+#[tauri::command]
+fn delete_provider(app: tauri::AppHandle, provider_id: String) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut settings = config::Settings::load(&app_data_dir)?;
+    if settings.default_provider_id.as_deref() == Some(&provider_id)
+        && settings.providers.len() > 1
+    {
+        return Err("Set a new default provider before deleting this one.".into());
+    }
+    settings.providers.retain(|p| p.id != provider_id);
+    if settings.default_provider_id.as_deref() == Some(&provider_id) {
+        settings.default_provider_id = settings.providers.first().map(|p| p.id.clone());
+    }
+    let _ = secrets::delete_api_key(&provider_id);
+    settings.save(&app_data_dir)
+}
+
+#[tauri::command]
+fn set_default_provider(app: tauri::AppHandle, provider_id: String) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut settings = config::Settings::load(&app_data_dir)?;
+    if !settings.providers.iter().any(|p| p.id == provider_id) {
+        return Err(format!("Provider '{}' not found.", provider_id));
+    }
+    settings.default_provider_id = Some(provider_id);
+    settings.save(&app_data_dir)
+}
+
+#[tauri::command]
+fn list_models(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> Result<Vec<models::ModelInfo>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let settings = config::Settings::load(&app_data_dir)?;
+    let provider = settings
+        .providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .ok_or_else(|| format!("Provider '{}' not found.", provider_id))?;
+    Ok(models::models_for_provider(provider))
+}
+
+#[tauri::command]
+fn has_api_key(provider_id: String) -> bool {
+    secrets::get_api_key(&provider_id).is_ok()
 }
 
 #[tauri::command]
@@ -85,9 +151,7 @@ fn save_mcp_servers(
 }
 
 #[tauri::command]
-fn load_mcp_servers(
-    app: tauri::AppHandle,
-) -> Result<Vec<mcp::McpServer>, String> {
+fn load_mcp_servers(app: tauri::AppHandle) -> Result<Vec<mcp::McpServer>, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     mcp::load_servers(&app_data_dir)
 }
@@ -113,25 +177,26 @@ async fn get_connected_servers(
 async fn stream_message(
     app: tauri::AppHandle,
     pool: tauri::State<'_, mcp::McpPool>,
-    api_key: String,
-    base_url: String,
+    provider_id: String,
+    model_id: String,
     messages: Vec<Message>,
 ) -> Result<(), String> {
-    let mut json_messages: Vec<serde_json::Value> = messages
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let settings = config::Settings::load(&app_data_dir)?;
+    let provider = settings
+        .providers
         .iter()
-        .map(|m| {
-            serde_json::json!({
-                "role": m.role,
-                "content": [{"type": "text", "text": m.content}]
-            })
-        })
-        .collect();
+        .find(|p| p.id == provider_id)
+        .ok_or_else(|| format!("Provider '{}' not found.", provider_id))?;
+    let api_key = secrets::get_api_key(&provider_id)?;
+    let http = reqwest::Client::new();
+    let client = llm::client_for(provider, api_key, http);
 
     let tools: Vec<serde_json::Value> = {
         let guard = pool.connections.lock().await;
         let mut all_tools = Vec::new();
-        for client in guard.values() {
-            if let Ok(server_tools) = mcp::list_tools(client).await {
+        for mcp_client in guard.values() {
+            if let Ok(server_tools) = mcp::list_tools(mcp_client).await {
                 for tool in server_tools {
                     all_tools.push(serde_json::json!({
                         "name": tool.name,
@@ -144,15 +209,19 @@ async fn stream_message(
         all_tools
     };
 
+    let mut json_messages: Vec<serde_json::Value> = messages
+        .iter()
+        .map(|m| serde_json::json!({
+            "role": m.role,
+            "content": [{"type": "text", "text": m.content}]
+        }))
+        .collect();
+
     loop {
-        let (assistant_blocks, tool_uses) = llm::stream_message(
-            &app,
-            &api_key,
-            &base_url,
-            &json_messages,
-            &tools,
-        )
-        .await?;
+        let (assistant_blocks, tool_uses) = client
+            .stream_raw(&app, &json_messages, &tools, &model_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
         json_messages.push(serde_json::json!({
             "role": "assistant",
@@ -165,18 +234,12 @@ async fn stream_message(
 
         let guard = pool.connections.lock().await;
         let mut tool_results = Vec::new();
-
         for tool_use in &tool_uses {
-            app.emit("tool-call", serde_json::json!({ "name": tool_use.name }))
-                .unwrap();
+            app.emit("tool-call", serde_json::json!({ "name": tool_use.name })).unwrap();
             let mut result_content = "Tool not found".to_string();
-            for client in guard.values() {
-                if let Ok(result) = mcp::call_tool(
-                    client,
-                    &tool_use.name,
-                    tool_use.input.clone(),
-                )
-                .await
+            for mcp_client in guard.values() {
+                if let Ok(result) =
+                    mcp::call_tool(mcp_client, &tool_use.name, tool_use.input.clone()).await
                 {
                     result_content = result;
                     break;
@@ -212,21 +275,26 @@ async fn save_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
 #[tauri::command]
 async fn rename_chat(
     app: tauri::AppHandle,
-    api_key: String,
-    base_url: String,
+    provider_id: String,
+    model_id: String,
     chat: Chat,
 ) -> Result<String, String> {
-    let chats_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("chats");
-    let message = &chat.messages[0];
-    let chat_name = llm::change_chat_name(&api_key, &base_url, message).await?;
-    let updated_chat = Chat {
-        name: chat_name.clone(),
-        ..chat
-    };
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let chats_dir = app_data_dir.join("chats");
+    let settings = config::Settings::load(&app_data_dir)?;
+    let provider = settings
+        .providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .ok_or_else(|| format!("Provider '{}' not found.", provider_id))?;
+    let api_key = secrets::get_api_key(&provider_id)?;
+    let http = reqwest::Client::new();
+    let client = llm::client_for(provider, api_key, http);
+    let chat_name = client
+        .generate_title(&chat.messages, &model_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let updated_chat = Chat { name: chat_name.clone(), ..chat };
     updated_chat.save(&chats_dir)?;
     Ok(chat_name)
 }
@@ -269,8 +337,12 @@ pub fn run() {
         .manage(mcp::McpPool::new())
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            upsert_provider,
+            delete_provider,
+            set_default_provider,
+            list_models,
+            has_api_key,
             connect_server,
-            save_settings,
             stream_message,
             save_chat,
             rename_chat,

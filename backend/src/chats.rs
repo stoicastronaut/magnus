@@ -6,6 +6,8 @@ use std::path::Path;
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -14,6 +16,7 @@ pub struct Chat {
     pub name: String,
     pub messages: Vec<Message>,
     pub created_at: String,
+    pub provider_id: String,
 }
 
 impl Chat {
