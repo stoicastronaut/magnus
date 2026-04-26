@@ -1,13 +1,44 @@
 use chats::Chat;
 use chats::Message;
+use std::collections::HashMap;
 use std::fs;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{Emitter, Manager};
+use tokio::sync::oneshot;
+
 mod chats;
 mod config;
 mod llm;
 mod mcp;
 mod models;
 mod secrets;
+
+// Approval decision type
+#[derive(Clone, Debug, PartialEq)]
+enum ToolApprovalDecision {
+    AllowOnce,
+    AlwaysAllow,
+    Deny,
+}
+
+// Audit log entry
+#[derive(serde::Serialize, Debug)]
+struct AuditLogEntry {
+    ts: String,
+    server: String,
+    tool: String,
+    decision: String,
+    duration_ms: u64,
+    output_size: usize,
+}
+
+// Tool approval state (using Arc wrapper to allow extraction)
+type ApprovalPendingMap = std::sync::Mutex<
+    HashMap<String, Option<oneshot::Sender<ToolApprovalDecision>>>,
+>;
+
+// Counter for approval request IDs
+static APPROVAL_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
@@ -214,22 +245,35 @@ async fn stream_message(
     let http = reqwest::Client::new();
     let client = llm::client_for(provider, api_key, http);
 
-    let tools: Vec<serde_json::Value> = {
+    // Load trust store
+    let trust_store = mcp::load_trust_store(&app_data_dir)?;
+
+    // Build tools_with_owner: Vec<(server_name, Tool)>
+    let tools_with_owner: Vec<(String, rmcp::model::Tool)> = {
         let guard = pool.connections.lock().await;
-        let mut all_tools = Vec::new();
-        for mcp_client in guard.values() {
-            if let Ok(server_tools) = mcp::list_tools(mcp_client).await {
-                for tool in server_tools {
-                    all_tools.push(serde_json::json!({
-                        "name": tool.name,
-                        "description": tool.description,
-                        "input_schema": tool.input_schema,
-                    }));
+        let mut out = Vec::new();
+        for (server_name, c) in guard.iter() {
+            if let Ok(ts) = mcp::list_tools(c).await {
+                for t in ts {
+                    out.push((server_name.clone(), t));
                 }
             }
         }
-        all_tools
+        out
     };
+
+    // Filter and build tools_for_model, excluding disabled tools
+    let tools_for_model: Vec<serde_json::Value> = tools_with_owner
+        .iter()
+        .filter(|(s, t)| !trust_store.is_tool_disabled(s, &t.name))
+        .map(|(_, t)| {
+            serde_json::json!({
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.input_schema,
+            })
+        })
+        .collect();
 
     let mut json_messages: Vec<serde_json::Value> = messages
         .iter()
@@ -244,7 +288,7 @@ async fn stream_message(
     loop {
         eprintln!("[stream_message] calling client.stream_raw");
         let (assistant_blocks, tool_uses) = client
-            .stream_raw(&app, &json_messages, &tools, &model_id)
+            .stream_raw(&app, &json_messages, &tools_for_model, &model_id)
             .await
             .map_err(|e| {
                 eprintln!("[stream_message] stream_raw error: {}", e);
@@ -267,26 +311,176 @@ async fn stream_message(
 
         let guard = pool.connections.lock().await;
         let mut tool_results = Vec::new();
+
         for tool_use in &tool_uses {
-            app.emit("tool-call", serde_json::json!({ "name": tool_use.name }))
-                .unwrap();
-            let mut result_content = "Tool not found".to_string();
-            for mcp_client in guard.values() {
-                if let Ok(result) = mcp::call_tool(
-                    mcp_client,
-                    &tool_use.name,
-                    tool_use.input.clone(),
+            // Find which server owns this tool
+            let (owning_server, _tool_obj) = tools_with_owner
+                .iter()
+                .find(|(_, t)| t.name == tool_use.name)
+                .ok_or_else(|| format!("Tool '{}' not found", tool_use.name))?;
+
+            let start_time = std::time::Instant::now();
+
+            // Check trust level
+            let can_execute = trust_store
+                .can_execute_without_prompt(owning_server, &tool_use.name);
+
+            let decision = if can_execute {
+                ToolApprovalDecision::AllowOnce
+            } else {
+                // Request approval from UI
+                let approval_id = format!(
+                    "{}",
+                    APPROVAL_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+                );
+                let (tx, rx) = oneshot::channel();
+
+                // Store pending approval
+                (|| -> Result<(), String> {
+                    let state = app.state::<ApprovalPendingMap>();
+                    let mut pending =
+                        state.lock().map_err(|e| e.to_string())?;
+                    pending.insert(approval_id.clone(), Some(tx));
+                    Ok(())
+                })()?;
+
+                // Emit approval request event with pretty-printed input
+                let input_preview =
+                    serde_json::to_string_pretty(&tool_use.input)
+                        .unwrap_or_else(|_| format!("{:?}", tool_use.input));
+
+                let _ = app.emit(
+                    "tool-approval-request",
+                    serde_json::json!({
+                        "id": approval_id,
+                        "server": owning_server,
+                        "tool": tool_use.name,
+                        "input_preview": input_preview,
+                    }),
+                );
+
+                // Wait for response with 5-minute timeout
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(300),
+                    rx,
                 )
                 .await
                 {
-                    result_content = result;
-                    break;
+                    Ok(Ok(dec)) => dec,
+                    Ok(Err(_)) => ToolApprovalDecision::Deny,
+                    Err(_) => {
+                        eprintln!(
+                            "[tool-approval] timeout for approval_id={}",
+                            approval_id
+                        );
+                        ToolApprovalDecision::Deny
+                    }
                 }
+            };
+
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+
+            // If AlwaysAllow, persist the decision
+            if decision == ToolApprovalDecision::AlwaysAllow {
+                let mut updated_store = trust_store.clone();
+                updated_store.set_tool_trust(
+                    owning_server,
+                    &tool_use.name,
+                    mcp::ToolTrust::AlwaysAllow,
+                );
+                let _ = mcp::save_trust_store(&app_data_dir, &updated_store);
             }
+
+            // Execute or deny
+            let result_content = match decision {
+                ToolApprovalDecision::Deny => {
+                    let _ = write_audit_log(
+                        &app_data_dir,
+                        owning_server,
+                        &tool_use.name,
+                        "deny",
+                        duration_ms,
+                        0,
+                    );
+                    "User denied tool execution".to_string()
+                }
+                _ => {
+                    // Execute the tool
+                    let client = guard.get(owning_server).ok_or_else(|| {
+                        format!("Server '{}' not connected", owning_server)
+                    })?;
+
+                    let call_start = std::time::Instant::now();
+
+                    let exec_result = match tokio::time::timeout(
+                        std::time::Duration::from_secs(30),
+                        mcp::call_tool(
+                            client,
+                            &tool_use.name,
+                            tool_use.input.clone(),
+                        ),
+                    )
+                    .await
+                    {
+                        Ok(Ok(result)) => result,
+                        Ok(Err(e)) => {
+                            let _ = write_audit_log(
+                                &app_data_dir,
+                                owning_server,
+                                &tool_use.name,
+                                "error",
+                                call_start.elapsed().as_millis() as u64,
+                                0,
+                            );
+                            format!("Tool execution error: {}", e)
+                        }
+                        Err(_) => {
+                            let _ = write_audit_log(
+                                &app_data_dir,
+                                owning_server,
+                                &tool_use.name,
+                                "timeout",
+                                30000,
+                                0,
+                            );
+                            "Tool execution timeout (30s)".to_string()
+                        }
+                    };
+
+                    let output_size = exec_result.len();
+                    let decision_str = match decision {
+                        ToolApprovalDecision::AllowOnce => "allow_once",
+                        ToolApprovalDecision::AlwaysAllow => "always_allow",
+                        ToolApprovalDecision::Deny => "deny",
+                    };
+                    let _ = write_audit_log(
+                        &app_data_dir,
+                        owning_server,
+                        &tool_use.name,
+                        decision_str,
+                        call_start.elapsed().as_millis() as u64,
+                        output_size,
+                    );
+
+                    // Truncate to 64 KB
+                    if exec_result.len() > 65536 {
+                        let truncated = exec_result[..65536].to_string();
+                        format!(
+                            "{}\n[truncated, original {} bytes]",
+                            truncated,
+                            exec_result.len()
+                        )
+                    } else {
+                        exec_result
+                    }
+                }
+            };
+
             tool_results.push(serde_json::json!({
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,
                 "content": result_content,
+                "is_error": decision == ToolApprovalDecision::Deny,
             }));
         }
         drop(guard);
@@ -371,11 +565,100 @@ fn delete_chat(app: tauri::AppHandle, chat: Chat) -> Result<(), String> {
     chat.delete(&chats_dir)
 }
 
+#[tauri::command]
+fn set_tool_trust(
+    app: tauri::AppHandle,
+    server_name: String,
+    tool_name: String,
+    trust: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut store = mcp::load_trust_store(&app_data_dir)?;
+
+    let tool_trust = match trust.as_str() {
+        "disabled" => mcp::ToolTrust::Disabled,
+        "ask_every_time" => mcp::ToolTrust::AskEveryTime,
+        "always_allow" => mcp::ToolTrust::AlwaysAllow,
+        _ => return Err("Invalid trust level".into()),
+    };
+
+    store.set_tool_trust(&server_name, &tool_name, tool_trust);
+    mcp::save_trust_store(&app_data_dir, &store)
+}
+
+#[tauri::command]
+fn respond_tool_approval(
+    app: tauri::AppHandle,
+    approval_id: String,
+    allow_once: bool,
+    always_allow: bool,
+    deny: bool,
+) -> Result<(), String> {
+    let decision = if deny {
+        ToolApprovalDecision::Deny
+    } else if always_allow {
+        ToolApprovalDecision::AlwaysAllow
+    } else if allow_once {
+        ToolApprovalDecision::AllowOnce
+    } else {
+        return Err(
+            "Must choose one decision: allow_once, always_allow, or deny"
+                .into(),
+        );
+    };
+
+    (|| -> Result<(), String> {
+        let state = app.state::<ApprovalPendingMap>();
+        let mut pending_map = state.lock().map_err(|e| e.to_string())?;
+        if let Some(Some(sender)) = pending_map.remove(&approval_id) {
+            let _ = sender.send(decision);
+        }
+        Ok(())
+    })()
+}
+
+fn write_audit_log(
+    app_data_dir: &std::path::Path,
+    server: &str,
+    tool: &str,
+    decision: &str,
+    duration_ms: u64,
+    output_size: usize,
+) -> Result<(), String> {
+    use chrono::Utc;
+    use std::io::Write;
+
+    std::fs::create_dir_all(app_data_dir).map_err(|e| e.to_string())?;
+    let log_path = app_data_dir.join("mcp_audit.log");
+
+    let ts = Utc::now().to_rfc3339();
+    let entry = AuditLogEntry {
+        ts,
+        server: server.to_string(),
+        tool: tool.to_string(),
+        decision: decision.to_string(),
+        duration_ms,
+        output_size,
+    };
+
+    let json = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|e| e.to_string())?;
+
+    writeln!(file, "{}", json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(mcp::McpPool::new())
+        .manage(ApprovalPendingMap::new(std::collections::HashMap::new()))
         .invoke_handler(tauri::generate_handler![
             get_settings,
             upsert_provider,
@@ -396,6 +679,8 @@ pub fn run() {
             load_mcp_servers,
             disconnect_server,
             get_connected_servers,
+            set_tool_trust,
+            respond_tool_approval,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

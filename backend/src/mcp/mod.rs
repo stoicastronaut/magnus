@@ -4,7 +4,9 @@ use std::fs;
 use std::path::Path;
 use tokio::sync::Mutex;
 mod client;
+mod trust;
 pub use client::{call_tool, connect, connect_server, list_tools, McpClient};
+pub use trust::{load_trust_store, save_trust_store, ToolTrust};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct McpServer {
@@ -94,7 +96,7 @@ mod tests {
     fn test_roundtrip_preserves_fields() {
         let dir = tempdir().unwrap();
         let server = make_server("github");
-        save_servers(dir.path(), &[server.clone()]).unwrap();
+        save_servers(dir.path(), std::slice::from_ref(&server)).unwrap();
         let loaded = load_servers(dir.path()).unwrap();
         assert_eq!(loaded[0].command, "npx");
         assert_eq!(loaded[0].args, vec!["-y", "some-server"]);

@@ -7,6 +7,8 @@ import { SendIcon, SunIcon, MoonIcon } from "./icons";
 import ModelPicker from "./ModelPicker";
 import ProviderPicker from "./ProviderPicker";
 import { Chat, Message, ProviderConfig, Settings, providerDot } from "../services/tauri";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 
 const SUGGESTIONS = [
   "Explain this error",
@@ -125,6 +127,13 @@ interface ChatAreaProps {
   onSettings?: () => void;
 }
 
+interface ToolApprovalRequest {
+  id: string;
+  server: string;
+  tool: string;
+  input_preview: string;
+}
+
 export function ChatArea({
   messages, loading, input, hasProviders, settings, activeChat,
   effectiveProvider, selectedModelId, onModelChange, onProviderChange,
@@ -132,6 +141,8 @@ export function ChatArea({
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
+  const [approvalRequest, setApprovalRequest] = useState<ToolApprovalRequest | null>(null);
+  const [respondingApprovalId, setRespondingApprovalId] = useState<string | null>(null);
   const hasMessages = messages.length > 0;
   const providerLocked = hasMessages;
   const canSend = hasProviders && !loading && !!input.trim() && !!selectedModelId;
@@ -139,6 +150,21 @@ export function ChatArea({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Set up tool approval request listener
+  useEffect(() => {
+    let unlistener: (() => void) | null = null;
+
+    (async () => {
+      unlistener = await listen<ToolApprovalRequest>("tool-approval-request", (event) => {
+        setApprovalRequest(event.payload);
+      });
+    })();
+
+    return () => {
+      if (unlistener) unlistener();
+    };
+  }, []);
 
   // Helper: find provider for a model_id tag
   const providerForModel = (modelId?: string): ProviderConfig | undefined => {
@@ -154,6 +180,26 @@ export function ChatArea({
       if (found) return found;
     }
     return settings.providers.find((p) => p.id === activeChat?.provider_id);
+  };
+
+  const handleApprovalResponse = async (
+    decision: "allow_once" | "always_allow" | "deny"
+  ) => {
+    if (!approvalRequest) return;
+    setRespondingApprovalId(approvalRequest.id);
+    try {
+      await invoke("respond_tool_approval", {
+        approvalId: approvalRequest.id,
+        allowOnce: decision === "allow_once",
+        alwaysAllow: decision === "always_allow",
+        deny: decision === "deny",
+      });
+    } catch (err) {
+      console.error("Failed to respond to tool approval:", err);
+    } finally {
+      setApprovalRequest(null);
+      setRespondingApprovalId(null);
+    }
   };
 
   return (
@@ -376,6 +422,153 @@ export function ChatArea({
           </div>
         </div>
       </div>
+
+      {/* Tool Approval Modal */}
+      {approvalRequest && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => handleApprovalResponse("deny")}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--bg)",
+              borderRadius: 12,
+              border: "1px solid var(--line)",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+              width: "min(90vw, 480px)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 24,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ margin: "0 0 8px", color: "var(--fg)", fontSize: 18, fontWeight: 600 }}>
+              Allow tool execution?
+            </h2>
+            <p style={{ margin: "0 0 16px", color: "var(--fg-2)", fontSize: 14, lineHeight: 1.5 }}>
+              The model wants to call a tool. Review the details below before allowing.
+            </p>
+
+            {/* Tool info */}
+            <div
+              style={{
+                backgroundColor: "var(--bg-2)",
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 16,
+                fontSize: 13,
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  <div style={{ color: "var(--fg-3)", fontSize: 11, fontFamily: "var(--mg-mono)", marginBottom: 2 }}>
+                    Server
+                  </div>
+                  <div style={{ color: "var(--fg)", fontWeight: 500 }}>
+                    {approvalRequest.server}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--fg-3)", fontSize: 11, fontFamily: "var(--mg-mono)", marginBottom: 2 }}>
+                    Tool
+                  </div>
+                  <div style={{ color: "var(--fg)", fontWeight: 500, fontFamily: "var(--mg-mono)" }}>
+                    {approvalRequest.tool}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--fg-3)", fontSize: 11, fontFamily: "var(--mg-mono)", marginBottom: 2 }}>
+                    Input
+                  </div>
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: 8,
+                      backgroundColor: "var(--bg)",
+                      borderRadius: 4,
+                      fontFamily: "var(--mg-mono)",
+                      fontSize: 12,
+                      overflowX: "auto",
+                      color: "var(--fg-2)",
+                    }}
+                  >
+                    {approvalRequest.input_preview}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => handleApprovalResponse("deny")}
+                disabled={respondingApprovalId === approvalRequest.id}
+                style={{
+                  flex: 1,
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "1px solid var(--line)",
+                  backgroundColor: "var(--bg-2)",
+                  color: "var(--fg)",
+                  fontFamily: "var(--mg-sans)",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  opacity: respondingApprovalId === approvalRequest.id ? 0.5 : 1,
+                }}
+              >
+                Deny
+              </button>
+              <button
+                onClick={() => handleApprovalResponse("allow_once")}
+                disabled={respondingApprovalId === approvalRequest.id}
+                style={{
+                  flex: 1,
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "1px solid var(--brand)",
+                  backgroundColor: "var(--brand)",
+                  color: "var(--on-brand)",
+                  fontFamily: "var(--mg-sans)",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  opacity: respondingApprovalId === approvalRequest.id ? 0.5 : 1,
+                }}
+              >
+                Allow Once
+              </button>
+              <button
+                onClick={() => handleApprovalResponse("always_allow")}
+                disabled={respondingApprovalId === approvalRequest.id}
+                style={{
+                  flex: 1,
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "1px solid var(--brand)",
+                  backgroundColor: "color-mix(in oklch, var(--brand) 80%, var(--bg))",
+                  color: "var(--brand)",
+                  fontFamily: "var(--mg-sans)",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  opacity: respondingApprovalId === approvalRequest.id ? 0.5 : 1,
+                }}
+              >
+                Always Allow
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
