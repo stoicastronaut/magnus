@@ -702,7 +702,6 @@ fn write_audit_log(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .manage(mcp::McpPool::new())
         .manage(ApprovalPendingMap::new(std::collections::HashMap::new()))
         .invoke_handler(tauri::generate_handler![
