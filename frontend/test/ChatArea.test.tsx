@@ -1,7 +1,35 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import { ChatArea } from "../components/ChatArea";
+import { ProviderConfig, Settings } from "../services/tauri";
+
+const anthropicProvider: ProviderConfig = {
+  id: "anthropic",
+  display_name: "Anthropic",
+  kind: "built_in",
+  which: "anthropic",
+};
+
+const openAiProvider: ProviderConfig = {
+  id: "open_ai",
+  display_name: "OpenAI",
+  kind: "built_in",
+  which: "open_ai",
+};
+
+const googleProvider: ProviderConfig = {
+  id: "google",
+  display_name: "Google",
+  kind: "built_in",
+  which: "google",
+};
+
+const providerSettings: Settings = {
+  default_provider_id: "anthropic",
+  providers: [anthropicProvider, openAiProvider, googleProvider],
+};
 
 const defaultProps = {
   messages: [],
@@ -21,6 +49,10 @@ const defaultProps = {
 };
 
 describe("ChatArea", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("shows empty state when there are no messages", () => {
     render(<ChatArea {...defaultProps} />);
     expect(screen.getByText("Review a diff")).toBeInTheDocument();
@@ -104,6 +136,65 @@ describe("ChatArea", () => {
   it("shows no-provider state when hasProviders is false", () => {
     render(<ChatArea {...defaultProps} hasProviders={false} />);
     expect(screen.getByText("No providers configured")).toBeInTheDocument();
+  });
+
+  it("shows the provider picker for a new chat when providers exist", () => {
+    render(<ChatArea {...defaultProps} settings={providerSettings} />);
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.queryByText("New chat")).not.toBeInTheDocument();
+  });
+
+  it("shows provider and model metadata for assistant responses", () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { id: "gpt-5", display_name: "GPT-5" },
+    ]);
+    const messages = [
+      { role: "assistant", content: "I can help with that.", model_id: "gpt-5" },
+    ];
+    render(
+      <ChatArea
+        {...defaultProps}
+        messages={messages}
+        settings={providerSettings}
+        activeChat={{ id: "1", name: "Chat", messages, created_at: "01-01-25", provider_id: "open_ai" }}
+        effectiveProvider={openAiProvider}
+        selectedModelId="gpt-5"
+      />
+    );
+
+    expect(screen.getByText(/via OpenAI · gpt-5/)).toBeInTheDocument();
+  });
+
+  it("shows a model switch divider when assistant model ids change", async () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { id: "gpt-5", display_name: "GPT-5" },
+      { id: "gemini-2.5-pro", display_name: "Gemini 2.5 Pro" },
+    ]);
+    const messages = [
+      { role: "assistant", content: "First answer", model_id: "gpt-5" },
+      { role: "assistant", content: "Second answer", model_id: "gemini-2.5-pro" },
+    ];
+    render(
+      <ChatArea
+        {...defaultProps}
+        messages={messages}
+        settings={providerSettings}
+        activeChat={{ id: "1", name: "Chat", messages, created_at: "01-01-25", provider_id: "open_ai" }}
+        effectiveProvider={openAiProvider}
+        selectedModelId="gemini-2.5-pro"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Gemini 2.5 Pro")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText((_, element) =>
+        element?.tagName === "SPAN" &&
+        element.textContent?.replace(/\s+/g, "") === "gpt-5→gemini-2.5-pro"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/via Google · gemini-2.5-pro/)).toBeInTheDocument();
   });
 
   it("disables send button when input is empty", () => {

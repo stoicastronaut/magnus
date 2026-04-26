@@ -57,6 +57,7 @@ mod tests {
             name: "Test Chat".to_string(),
             messages: vec![],
             created_at: "01-01-25".to_string(),
+            provider_id: "anthropic".to_string(),
         }
     }
 
@@ -87,7 +88,7 @@ mod tests {
         let chat = make_chat();
         chat.save(dir.path()).unwrap();
         chat.delete(dir.path()).unwrap();
-        let expected = dir.path().join("01-01-25-uuid-test.json");
+        let expected = dir.path().join("01-01-25-test-uuid.json");
         assert!(!expected.exists());
     }
 
@@ -107,10 +108,12 @@ mod tests {
             Message {
                 role: "user".to_string(),
                 content: "Hello!".to_string(),
+                model_id: None,
             },
             Message {
                 role: "assistant".to_string(),
                 content: "Hi!".to_string(),
+                model_id: Some("claude-haiku-4-5-20251001".to_string()),
             },
         ];
         chat.save(dir.path()).unwrap();
@@ -119,5 +122,35 @@ mod tests {
         assert_eq!(loaded.messages.len(), 2);
         assert_eq!(loaded.messages[0].content, "Hello!");
         assert_eq!(loaded.messages[1].content, "Hi!");
+        assert_eq!(loaded.provider_id, "anthropic");
+        assert_eq!(
+            loaded.messages[1].model_id.as_deref(),
+            Some("claude-haiku-4-5-20251001")
+        );
+    }
+
+    #[test]
+    fn test_load_legacy_chat_defaults_missing_provider_and_model_fields() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("legacy-chat.json");
+        fs::write(
+            &path,
+            r#"{
+  "id": "legacy",
+  "name": "Old Chat",
+  "messages": [
+    { "role": "user", "content": "Hello" },
+    { "role": "assistant", "content": "Hi there" }
+  ],
+  "created_at": "01-01-25"
+}"#,
+        )
+        .unwrap();
+
+        let loaded = Chat::load(&path).unwrap();
+        assert_eq!(loaded.provider_id, "");
+        assert_eq!(loaded.messages.len(), 2);
+        assert_eq!(loaded.messages[0].model_id, None);
+        assert_eq!(loaded.messages[1].model_id, None);
     }
 }
