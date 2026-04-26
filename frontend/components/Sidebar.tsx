@@ -1,18 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { PawIcon, GearIcon, PlusIcon, SearchIcon } from "./icons";
 import { PawBullet } from "./Mascot";
+import { Chat } from "../services/tauri";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
-export interface Chat {
-  id: string;
-  name: string;
-  messages: Message[];
-  created_at: string;
-}
+export type { Chat };
 
 interface ContextMenu {
   chatId: string;
