@@ -50,9 +50,15 @@ fn get_settings(app: tauri::AppHandle) -> Result<config::Settings, String> {
 #[tauri::command]
 fn upsert_provider(
     app: tauri::AppHandle,
-    provider: config::ProviderConfig,
+    mut provider: config::ProviderConfig,
     api_key: Option<String>,
 ) -> Result<(), String> {
+    // Validate custom provider URLs before saving
+    if let config::ProviderType::Custom { base_url, .. } = &mut provider._type {
+        let normalized_url = llm::validate_base_url(base_url)?;
+        *base_url = normalized_url;
+    }
+
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let mut settings =
         config::Settings::load(&app_data_dir).unwrap_or(config::Settings {

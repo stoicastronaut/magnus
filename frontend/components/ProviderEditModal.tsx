@@ -38,11 +38,75 @@ export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hostWarning, setHostWarning] = useState<string | null>(null);
+
+  // Mirror validation for base URL on the frontend
+  const validateBaseUrl = (url: string): string | null => {
+    if (!url.trim()) return null; // Empty is caught in handleSave
+
+    try {
+      const parsed = new URL(url);
+
+      // Check scheme
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return `Unsupported scheme: ${parsed.protocol}`;
+      }
+
+      // Check HTTP restriction to localhost only
+      if (parsed.protocol === "http:") {
+        const host = parsed.hostname;
+        if (host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]") {
+          return "http:// is only allowed for localhost, 127.0.0.1, or [::1]";
+        }
+      }
+
+      // Check for embedded credentials
+      if (parsed.username || parsed.password) {
+        return "URL must not embed credentials";
+      }
+
+      // Check for fragment
+      if (parsed.hash) {
+        return "URL must not have a fragment";
+      }
+
+      return null;
+    } catch {
+      return "Invalid URL format";
+    }
+  };
+
+  // Check for non-standard hosts and show warning
+  const checkHostWarning = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname || "";
+      const standardHosts = [
+        "api.anthropic.com",
+        "api.openai.com",
+        "generativelanguage.googleapis.com",
+      ];
+      if (!standardHosts.includes(host)) {
+        setHostWarning(`Your API key will be sent to ${host}. Continue only if you trust this endpoint.`);
+      } else {
+        setHostWarning(null);
+      }
+    } catch {
+      setHostWarning(null);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
     if (isCustom && !displayName.trim()) { setError("Display name is required."); return; }
     if (isCustom && !baseUrl.trim()) { setError("Base URL is required."); return; }
+
+    // Validate base URL format on frontend
+    if (isCustom) {
+      const urlError = validateBaseUrl(baseUrl);
+      if (urlError) { setError(urlError); return; }
+    }
+
     // For brand-new providers, require an API key
     if (!mode.existing && !apiKey.trim()) { setError("API key is required."); return; }
 
@@ -146,7 +210,10 @@ export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
           <FormRow label="Base URL">
             <input
               value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
+              onChange={(e) => {
+                setBaseUrl(e.target.value);
+                checkHostWarning(e.target.value);
+              }}
               placeholder="https://…"
               style={inputStyle}
             />
@@ -167,6 +234,12 @@ export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
         {error && (
           <div style={{ fontSize: 12, color: "oklch(0.65 0.18 25)", padding: "8px 12px", background: "color-mix(in oklch, oklch(0.65 0.18 25) 12%, transparent)", borderRadius: 7 }}>
             {error}
+          </div>
+        )}
+
+        {hostWarning && (
+          <div style={{ fontSize: 12, color: "oklch(0.72 0.15 60)", padding: "8px 12px", background: "color-mix(in oklch, oklch(0.72 0.15 60) 12%, transparent)", borderRadius: 7 }}>
+            {hostWarning}
           </div>
         )}
 

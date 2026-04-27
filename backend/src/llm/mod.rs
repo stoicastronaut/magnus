@@ -1,10 +1,12 @@
 mod anthropic;
 mod gemini;
 mod openai;
+mod url_validation;
 
 pub use anthropic::AnthropicClient;
 pub use gemini::GeminiClient;
 pub use openai::OpenAIClient;
+pub use url_validation::validate_base_url;
 
 use crate::chats::Message;
 use crate::config::{BuiltInId, Protocol, ProviderConfig, ProviderType};

@@ -56,9 +56,10 @@ impl super::LlmClient for GeminiClient {
         let response = self
             .http
             .post(format!(
-                "{}models/{}:streamGenerateContent?alt=sse&key={}",
-                self.base_url, model_id, self.api_key
+                "{}models/{}:streamGenerateContent?alt=sse",
+                self.base_url, model_id
             ))
+            .header("x-goog-api-key", &self.api_key)
             .json(&body)
             .send()
             .await?;
@@ -136,9 +137,10 @@ impl super::LlmClient for GeminiClient {
         let response = self
             .http
             .post(format!(
-                "{}models/{}:generateContent?key={}",
-                self.base_url, model_id, self.api_key
+                "{}models/{}:generateContent",
+                self.base_url, model_id
             ))
+            .header("x-goog-api-key", &self.api_key)
             .json(&body)
             .send()
             .await?;
