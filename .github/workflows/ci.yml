@@ -64,5 +64,14 @@ jobs:
       - name: Clippy
         run: cargo clippy --manifest-path backend/Cargo.toml -- -D warnings
 
+      - name: Security audit
+        run: cargo audit --manifest-path backend/Cargo.toml --deny warnings
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Dependency policy check
+        run: cargo deny --manifest-path backend/Cargo.toml check advisories bans
+
       - name: Test
         run: cargo test --manifest-path backend/Cargo.toml
