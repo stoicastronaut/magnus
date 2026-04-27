@@ -128,6 +128,12 @@ pnpm tsc --noEmit
 ### Proxy notes
 The proxy used in development is `https://llm-proxy.edgez.live/` — it follows standard Anthropic API format. The request goes to `{base_url}v1/messages`. Note: no slash between base_url and `v1` since base_url already has a trailing slash.
 
+## Data Storage & Privacy
+
+Chats, MCP server configs, and provider settings are stored as plaintext JSON in `~/Library/Application Support/com.stoicastronaut.magnus/`. These files are written with mode `0600` on Unix (owner read/write only). API keys and MCP tokens are stored in the OS keychain for improved security. Audit logs are also persisted to disk with restricted permissions.
+
+Future: chat encryption via keychain-derived keys is planned but not yet implemented.
+
 ## Current File Structure
 
 ```

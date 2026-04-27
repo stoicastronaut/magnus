@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::fs_perm;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Message {
     pub role: String,
@@ -27,7 +29,8 @@ impl Chat {
         let path = chats_dir.join(filename);
         let str_pretty =
             serde_json::to_string_pretty(&self).map_err(|e| e.to_string())?;
-        fs::write(path, str_pretty).map_err(|e| e.to_string())?;
+        fs::write(&path, str_pretty).map_err(|e| e.to_string())?;
+        fs_perm::restrict_permissions(&path).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -152,5 +155,24 @@ mod tests {
         assert_eq!(loaded.messages.len(), 2);
         assert_eq!(loaded.messages[0].model_id, None);
         assert_eq!(loaded.messages[1].model_id, None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_save_creates_file_with_0600_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let chat = make_chat();
+        chat.save(dir.path()).unwrap();
+        let path = dir.path().join("01-01-25-test-uuid.json");
+
+        let perms = fs::metadata(&path).unwrap().permissions();
+        let mode = perms.mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "Chat file should be readable/writable by owner only, got {:#o}",
+            mode
+        );
     }
 }

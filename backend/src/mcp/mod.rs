@@ -15,6 +15,8 @@ fn default_server_id() -> String {
     Uuid::new_v4().to_string()
 }
 
+use crate::fs_perm;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct McpServer {
     #[serde(default = "default_server_id")]
@@ -75,7 +77,8 @@ pub fn save_servers(
     let path = app_data_dir.join("mcp_servers.json");
     let json =
         serde_json::to_string_pretty(servers).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    fs_perm::restrict_permissions(&path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -292,5 +295,23 @@ mod tests {
         let loaded = load_servers(dir.path()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(!loaded[0].locally_created);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_save_servers_creates_file_with_0600_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        save_servers(dir.path(), &[make_server("github")]).unwrap();
+        let path = dir.path().join("mcp_servers.json");
+
+        let perms = fs::metadata(&path).unwrap().permissions();
+        let mode = perms.mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "MCP servers file should be readable/writable by owner only, got {:#o}",
+            mode
+        );
     }
 }

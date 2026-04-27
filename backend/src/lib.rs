@@ -8,6 +8,7 @@ use tokio::sync::oneshot;
 
 mod chats;
 mod config;
+mod fs_perm;
 mod llm;
 mod mcp;
 mod models;

@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::fs_perm;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
     pub default_provider_id: Option<String>,
@@ -52,7 +54,8 @@ impl Settings {
         let path = app_data_dir.join("settings.json");
         let str_pretty =
             serde_json::to_string_pretty(&self).map_err(|e| e.to_string())?;
-        fs::write(path, str_pretty).map_err(|e| e.to_string())?;
+        fs::write(&path, str_pretty).map_err(|e| e.to_string())?;
+        fs_perm::restrict_permissions(&path).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -144,6 +147,25 @@ mod tests {
         assert_eq!(
             json["providers"][1]["base_url"],
             "https://proxy.example.com/v1/"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_save_creates_file_with_0600_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let settings = make_settings();
+        settings.save(dir.path()).unwrap();
+        let path = dir.path().join("settings.json");
+
+        let perms = fs::metadata(&path).unwrap().permissions();
+        let mode = perms.mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "Settings file should be readable/writable by owner only, got {:#o}",
+            mode
         );
     }
 }
