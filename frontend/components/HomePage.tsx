@@ -13,6 +13,7 @@ import {
   loadChats,
   deleteChat,
 } from "../services/tauri";
+import { log, logError } from "../services/log";
 
 interface HomePageProps {
   onSettings: () => void;
@@ -119,17 +120,17 @@ export function HomePage({ onSettings, theme, onToggleTheme, settingsVersion }: 
   }
 
   async function handleSend() {
-    console.log("[handleSend] called", { input, loading, activeChat });
+    log("[handleSend] called", { input, loading, activeChat });
     if (!input.trim() || loading || !activeChat) {
-      console.log("[handleSend] early return", { hasInput: !!input.trim(), loading, hasActiveChat: !!activeChat });
+      log("[handleSend] early return", { hasInput: !!input.trim(), loading, hasActiveChat: !!activeChat });
       return;
     }
 
     const pid = activeChat.provider_id || effectiveProviderId;
     const mid = selectedModelId;
-    console.log("[handleSend] resolved", { pid, mid });
+    log("[handleSend] resolved", { pid, mid });
     if (!pid || !mid) {
-      console.log("[handleSend] missing provider or model");
+      log("[handleSend] missing provider or model");
       return;
     }
 
@@ -154,7 +155,7 @@ export function HomePage({ onSettings, theme, onToggleTheme, settingsVersion }: 
     let accumulated = "";
 
     const unlisten = await listen<string>("stream-token", (event) => {
-      console.log("[stream-token] received", event.payload?.length, "chars");
+      log("[stream-token] received", event.payload?.length, "chars");
       accumulated += event.payload;
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
@@ -165,9 +166,9 @@ export function HomePage({ onSettings, theme, onToggleTheme, settingsVersion }: 
     });
 
     try {
-      console.log("[handleSend] calling streamMessage", { pid, mid, messageCount: newMessages.length });
+      log("[handleSend] calling streamMessage", { pid, mid, messageCount: newMessages.length });
       await streamMessage(pid, mid, newMessages);
-      console.log("[handleSend] streamMessage returned, accumulated:", accumulated.length, "chars");
+      log("[handleSend] streamMessage returned, accumulated:", accumulated.length, "chars");
 
       setChats((prev) => {
         const chat = prev.find((c) => c.id === activeChatId);
@@ -183,7 +184,7 @@ export function HomePage({ onSettings, theme, onToggleTheme, settingsVersion }: 
           .catch(() => {});
       }
     } catch (err) {
-      console.error("[handleSend] error:", err);
+      logError("[handleSend] error:", err);
       setChats((prev) => prev.map((c) => {
         if (c.id !== activeChatId) return c;
         const updated = [...c.messages];

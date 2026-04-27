@@ -12,6 +12,7 @@ mod fs_perm;
 mod llm;
 mod mcp;
 mod models;
+mod redact;
 mod secrets;
 
 // Approval decision type
@@ -256,11 +257,11 @@ async fn stream_message(
     model_id: String,
     messages: Vec<Message>,
 ) -> Result<(), String> {
-    eprintln!(
-        "[stream_message] called provider_id={} model_id={} message_count={}",
+    tracing::debug!(
         provider_id,
         model_id,
-        messages.len()
+        message_count = messages.len(),
+        "stream_message called"
     );
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let settings = config::Settings::load(&app_data_dir)?;
@@ -269,9 +270,8 @@ async fn stream_message(
         .iter()
         .find(|p| p.id == provider_id)
         .ok_or_else(|| format!("Provider '{}' not found.", provider_id))?;
-    eprintln!("[stream_message] found provider: {:?}", provider);
     let api_key = secrets::get_api_key(&provider_id)?;
-    eprintln!("[stream_message] got api key (len={})", api_key.len());
+    tracing::debug!("retrieved api key");
     let http = reqwest::Client::new();
     let client = llm::client_for(provider, api_key, http);
 
@@ -329,18 +329,18 @@ async fn stream_message(
         .collect();
 
     loop {
-        eprintln!("[stream_message] calling client.stream_raw");
+        tracing::debug!("calling client.stream_raw");
         let (assistant_blocks, tool_uses) = client
             .stream_raw(&app, &json_messages, &tools_for_model, &model_id)
             .await
             .map_err(|e| {
-                eprintln!("[stream_message] stream_raw error: {}", e);
+                tracing::warn!("stream_raw error: {}", e);
                 e.to_string()
             })?;
-        eprintln!(
-            "[stream_message] stream_raw returned {} blocks, {} tool_uses",
-            assistant_blocks.len(),
-            tool_uses.len()
+        tracing::debug!(
+            blocks = assistant_blocks.len(),
+            tool_uses = tool_uses.len(),
+            "stream_raw returned"
         );
 
         json_messages.push(serde_json::json!({
@@ -422,8 +422,8 @@ async fn stream_message(
                     Ok(Ok(dec)) => dec,
                     Ok(Err(_)) => ToolApprovalDecision::Deny,
                     Err(_) => {
-                        eprintln!(
-                            "[tool-approval] timeout for approval_id={}",
+                        tracing::warn!(
+                            "tool approval timeout: {}",
                             approval_id
                         );
                         ToolApprovalDecision::Deny
@@ -708,6 +708,13 @@ fn write_audit_log(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "magnus=info".into()),
+        )
+        .init();
+
     tauri::Builder::default()
         .manage(mcp::McpPool::new())
         .manage(ApprovalPendingMap::new(std::collections::HashMap::new()))

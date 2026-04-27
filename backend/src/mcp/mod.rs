@@ -147,7 +147,10 @@ pub fn load_servers(app_data_dir: &Path) -> Result<Vec<McpServer>, String> {
 
     // If we migrated any tokens, rewrite the file without them
     if migrated_count > 0 {
-        eprintln!("[MCP] Migrated {} MCP tokens to keychain", migrated_count);
+        tracing::info!(
+            count = migrated_count,
+            "migrated MCP tokens to keychain"
+        );
         save_servers(app_data_dir, &servers)?;
     }
 

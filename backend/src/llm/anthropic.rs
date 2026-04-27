@@ -4,6 +4,7 @@ use tauri::Emitter;
 
 use super::{LlmError, ToolUse};
 use crate::chats::Message;
+use crate::redact;
 
 struct SseState {
     current_text: String,
@@ -178,7 +179,7 @@ impl super::LlmClient for AnthropicClient {
         }
 
         let url = format!("{}v1/messages", self.base_url);
-        eprintln!("[anthropic.stream_raw] POST {}", url);
+        tracing::debug!(url = %redact::url_host(&url), "anthropic POST");
         let response = self
             .http
             .post(&url)
@@ -189,14 +190,10 @@ impl super::LlmClient for AnthropicClient {
             .await?;
 
         let status = response.status();
-        eprintln!("[anthropic.stream_raw] response status: {}", status);
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            eprintln!("[anthropic.stream_raw] error body: {}", body);
-            return Err(super::LlmError::Api(format!(
-                "HTTP {}: {}",
-                status, body
-            )));
+            let _body = response.text().await.unwrap_or_default();
+            tracing::warn!(status = %status, url = %redact::url_host(&url), "anthropic API error");
+            return Err(super::LlmError::Api(format!("HTTP {}", status)));
         }
 
         let mut stream = response.bytes_stream();
@@ -207,11 +204,6 @@ impl super::LlmClient for AnthropicClient {
             let chunk = chunk?;
             chunk_count += 1;
             let text = String::from_utf8_lossy(&chunk);
-            eprintln!(
-                "[anthropic.stream_raw] chunk {} ({} bytes)",
-                chunk_count,
-                chunk.len()
-            );
             for line in text.lines() {
                 if !line.starts_with("data: ") {
                     continue;
@@ -225,15 +217,15 @@ impl super::LlmClient for AnthropicClient {
                     continue;
                 };
                 if let Some(token) = state.process_event(&json) {
-                    eprintln!(
-                        "[anthropic.stream_raw] emitting token: {:?}",
-                        token
-                    );
                     app.emit("stream-token", token).unwrap();
                 }
             }
         }
-        eprintln!("[anthropic.stream_raw] stream ended after {} chunks, {} content blocks", chunk_count, state.content_blocks.len());
+        tracing::debug!(
+            chunks = chunk_count,
+            content_blocks = state.content_blocks.len(),
+            "stream ended"
+        );
 
         Ok((state.content_blocks, state.tool_uses))
     }
