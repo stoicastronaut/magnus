@@ -23,6 +23,7 @@ import {
   exportDiagnostics,
   revealDiagnosticsFolder,
   revealPath,
+  writeClipboardText,
   logDiagnosticError,
   DiagnosticEvent,
   ExportOptions,
@@ -64,26 +65,7 @@ const ghostBtn = (extra?: React.CSSProperties): React.CSSProperties => ({
 });
 
 async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.top = "0";
-    textarea.style.left = "0";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const copied = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    if (!copied) {
-      throw new Error("Clipboard copy is not available in this context.");
-    }
-  }
+  await writeClipboardText(text);
 }
 
 function SectionHeader({ eyebrow, title, subtitle, right }: {
