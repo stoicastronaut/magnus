@@ -18,16 +18,25 @@ import {
   disconnectServer,
   getConnectedServers,
   listTools,
+  getRecentDiagnostics,
+  getDiagnosticsSummary,
+  exportDiagnostics,
+  revealDiagnosticsFolder,
+  revealPath,
+  logDiagnosticError,
+  DiagnosticEvent,
+  ExportOptions,
   providerDot,
 } from "../services/tauri";
 import ProviderEditModal from "./ProviderEditModal";
 
-type Section = "api" | "mcp" | "appearance" | "chat";
+type Section = "api" | "mcp" | "diagnostics" | "appearance" | "chat";
 
 interface Props {
   onBack: () => void;
   theme: "dark" | "light";
   onThemeChange: (t: "dark" | "light") => void;
+  activeChatId: string | null;
 }
 
 // ── Shared primitives ──────────────────────────────────────────────────────
@@ -252,7 +261,13 @@ function ApiSection() {
       }
       setApiKeyInput("");
       await reload();
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      logDiagnosticError("Provider save failed", {
+        provider_id: selectedId,
+        error: String(e),
+      });
+      setError(String(e));
+    }
     finally { setSaving(false); }
   };
 
@@ -264,13 +279,25 @@ function ApiSection() {
       await deleteProvider(selectedId);
       setSelectedId(null);
       await reload();
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      logDiagnosticError("Provider delete failed", {
+        provider_id: selectedId,
+        error: String(e),
+      });
+      setError(String(e));
+    }
   };
 
   const handleSetDefault = async () => {
     if (!selectedId) return;
     try { await setDefaultProvider(selectedId); await reload(); }
-    catch (e) { setError(String(e)); }
+    catch (e) {
+      logDiagnosticError("Default provider update failed", {
+        provider_id: selectedId,
+        error: String(e),
+      });
+      setError(String(e));
+    }
   };
 
   const selected = settings?.providers.find((p) => p.id === selectedId) ?? null;
@@ -516,6 +543,9 @@ function McpSection() {
       setToolsByServer((t) => ({ ...t, [server.name]: tools.map((x) => x.name) }));
       setStatus((s) => ({ ...s, [server.name]: "" }));
     } catch (err) {
+      logDiagnosticError("MCP connection failed", {
+        error: String(err),
+      });
       setStatus((s) => ({ ...s, [server.name]: `Error: ${err}` }));
     }
   }
@@ -650,6 +680,175 @@ function McpSection() {
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+// ── Diagnostics section ───────────────────────────────────────────────────
+
+function DiagnosticsSection({ activeChatId, onEventsLoaded }: { activeChatId: string | null; onEventsLoaded: (count: number) => void }) {
+  const [events, setEvents] = useState<DiagnosticEvent[]>([]);
+  const [includeEndpoint, setIncludeEndpoint] = useState(false);
+  const [includeTranscript, setIncludeTranscript] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("");
+  const [exportedPath, setExportedPath] = useState<string | null>(null);
+
+  const options = (): ExportOptions => ({
+    includeFullEndpointUrl: includeEndpoint,
+    includeActiveChatTranscript: includeTranscript,
+    activeChatId,
+  });
+
+  const reload = useCallback(async () => {
+    const recent = await getRecentDiagnostics(200);
+    setEvents(recent);
+    onEventsLoaded(recent.length);
+  }, [onEventsLoaded]);
+
+  useEffect(() => {
+    getRecentDiagnostics(200)
+      .then((recent) => {
+        setEvents(recent);
+        onEventsLoaded(recent.length);
+      })
+      .catch(() => setStatus("Unable to load diagnostics."));
+  }, [onEventsLoaded]);
+
+  async function handleCopySummary() {
+    setStatus("");
+    try {
+      const summary = await getDiagnosticsSummary(options());
+      await navigator.clipboard.writeText(summary);
+      setStatus("Summary copied.");
+    } catch (err) {
+      setStatus(`Copy failed: ${err}`);
+    }
+  }
+
+  async function handleExport() {
+    setStatus("");
+    try {
+      const result = await exportDiagnostics(options());
+      setExportedPath(result.path);
+      setStatus("Diagnostics exported.");
+      await revealPath(result.path).catch(() => {});
+    } catch (err) {
+      setStatus(`Export failed: ${err}`);
+    }
+  }
+
+  async function handleRevealFolder() {
+    try {
+      await revealDiagnosticsFolder();
+    } catch (err) {
+      setStatus(`Reveal failed: ${err}`);
+    }
+  }
+
+  async function handleCopyEvent(event: DiagnosticEvent) {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(event, null, 2));
+      setStatus("Error details copied.");
+    } catch (err) {
+      setStatus(`Copy failed: ${err}`);
+    }
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        eyebrow="Support"
+        title="Diagnostics"
+        subtitle="Local logs and export tools for support issues."
+        right={<button onClick={reload} style={ghostBtn()}>Refresh</button>}
+      />
+
+      <FieldGroup title="Export options">
+        <ToggleRow
+          label="Include full endpoint URL"
+          hint="Adds custom provider base URLs to the export."
+          value={includeEndpoint}
+          onChange={setIncludeEndpoint}
+        />
+        <ToggleRow
+          label="Include current chat transcript"
+          hint={activeChatId ? "Adds only the currently active chat." : "No active chat selected."}
+          value={includeTranscript}
+          onChange={setIncludeTranscript}
+        />
+      </FieldGroup>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+        <button onClick={handleCopySummary} style={ghostBtn()}>Copy summary</button>
+        <button onClick={handleExport} style={primaryBtn()}>Export diagnostics</button>
+        <button onClick={handleRevealFolder} style={ghostBtn()}>Reveal diagnostics folder</button>
+        {exportedPath && <button onClick={() => revealPath(exportedPath)} style={ghostBtn()}>Reveal exported file</button>}
+      </div>
+
+      {status && (
+        <div style={{
+          fontSize: 12, color: "var(--fg-2)", padding: "8px 12px",
+          background: "var(--bg-2)", border: "1px solid var(--line)", borderRadius: 7,
+          marginBottom: 16,
+        }}>{status}</div>
+      )}
+
+      <FieldGroup title="Recent errors">
+        {events.length === 0 ? (
+          <div style={{ color: "var(--fg-3)", fontSize: 13 }}>No recent warnings or errors.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {events.map((event, index) => {
+              const key = `${event.timestamp}-${index}`;
+              const isExpanded = expanded === key;
+              return (
+                <div
+                  key={key}
+                  style={{
+                    textAlign: "left", padding: 12, borderRadius: 8,
+                    border: "1px solid var(--line)", background: "var(--bg-2)",
+                    color: "var(--fg)", fontFamily: "var(--mg-sans)",
+                    userSelect: "text",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: isExpanded ? 8 : 0 }}>
+                    <span style={{ fontSize: 10, fontFamily: "var(--mg-mono)", color: "var(--fg-3)" }}>
+                      {new Date(event.timestamp).toLocaleString()}
+                    </span>
+                    <span style={{
+                      fontSize: 10, fontFamily: "var(--mg-mono)",
+                      color: event.level === "fatal" || event.level === "error" ? "oklch(0.65 0.18 25)" : "var(--fg-3)",
+                    }}>{event.level}</span>
+                    <span style={{ fontSize: 12, flex: 1 }}>{event.message}</span>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded(isExpanded ? null : key)}
+                      style={ghostBtn()}
+                    >
+                      {isExpanded ? "Collapse" : "Details"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyEvent(event)}
+                      style={ghostBtn()}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <pre style={{
+                      margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                      fontSize: 11, color: "var(--fg-2)", fontFamily: "var(--mg-mono)",
+                      userSelect: "text",
+                    }}>{JSON.stringify(event.context, null, 2)}</pre>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </FieldGroup>
     </div>
   );
 }
@@ -799,8 +998,15 @@ function NavGroupLabel({ children }: { children: React.ReactNode }) {
 
 // ── Shell ──────────────────────────────────────────────────────────────────
 
-export function SettingsPage({ onBack, theme, onThemeChange }: Props) {
+export function SettingsPage({ onBack, theme, onThemeChange, activeChatId }: Props) {
   const [section, setSection] = useState<Section>("api");
+  const [diagnosticsBadge, setDiagnosticsBadge] = useState(0);
+
+  useEffect(() => {
+    getRecentDiagnostics(200)
+      .then((events) => setDiagnosticsBadge(events.length))
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "var(--bg)", overflow: "hidden" }}>
@@ -839,6 +1045,7 @@ export function SettingsPage({ onBack, theme, onThemeChange }: Props) {
           <NavGroupLabel>Account</NavGroupLabel>
           <NavItem icon={<KeyIcon />} label="API Configuration" active={section === "api"} onClick={() => setSection("api")} />
           <NavItem icon={<PlugIcon />} label="MCP Connections" active={section === "mcp"} onClick={() => setSection("mcp")} />
+          <NavItem icon={<DiagnosticsIcon />} label="Diagnostics" badge={diagnosticsBadge || undefined} active={section === "diagnostics"} onClick={() => setSection("diagnostics")} />
           <div style={{ height: 10 }} />
           <NavGroupLabel>Preferences</NavGroupLabel>
           <NavItem icon={<PaletteIcon />} label="Appearance" active={section === "appearance"} onClick={() => setSection("appearance")} />
@@ -862,6 +1069,7 @@ export function SettingsPage({ onBack, theme, onThemeChange }: Props) {
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           {section === "api" && <ApiSection />}
           {section === "mcp" && <McpSection />}
+          {section === "diagnostics" && <DiagnosticsSection activeChatId={activeChatId} onEventsLoaded={setDiagnosticsBadge} />}
           {section === "appearance" && <AppearanceSection theme={theme} onThemeChange={onThemeChange} />}
           {section === "chat" && <ChatBehaviorSection />}
         </div>
@@ -888,6 +1096,9 @@ function KeyIcon() {
 }
 function PlugIcon() {
   return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v4" /><path d="M10 2v4" /><rect x="4" y="6" width="8" height="5" rx="1" /><path d="M8 11v3" /></svg>;
+}
+function DiagnosticsIcon() {
+  return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2h7l3 3v9H3z" /><path d="M10 2v3h3" /><path d="M5 8h6" /><path d="M5 11h4" /></svg>;
 }
 function PaletteIcon() {
   return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 14a6 6 0 1 1 6-6c0 1.5-1 2-2 2h-1.5a1.5 1.5 0 0 0 0 3c0 .5.5 1 1 1" /><circle cx="5" cy="7" r=".7" fill="currentColor" /><circle cx="8" cy="4.5" r=".7" fill="currentColor" /><circle cx="11" cy="7" r=".7" fill="currentColor" /></svg>;
