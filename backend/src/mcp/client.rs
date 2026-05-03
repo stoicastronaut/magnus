@@ -37,10 +37,7 @@ pub async fn connect() -> Result<(), Box<dyn std::error::Error>> {
         ))?)
         .await?;
 
-    let resources = client.list_all_tools().await?;
-    for resource in &resources {
-        println!("{:#?}", resource);
-    }
+    let _resources = client.list_all_tools().await?;
 
     Ok(())
 }
