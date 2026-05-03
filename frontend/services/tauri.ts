@@ -162,6 +162,9 @@ export const revealDiagnosticsFolder = (): Promise<void> =>
 export const revealPath = (path: string): Promise<void> =>
   invoke("reveal_path", { path });
 
+export const writeClipboardText = (text: string): Promise<void> =>
+  invoke("plugin:clipboard-manager|write_text", { text });
+
 export function installGlobalDiagnosticsHandlers() {
   window.addEventListener("error", (event) => {
     void logClientEvent({
