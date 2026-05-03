@@ -9,6 +9,7 @@ function App() {
   const [view, setView] = useState<View>("home");
   const [theme, setTheme] = useState<Theme>("dark");
   const [settingsVersion, setSettingsVersion] = useState(0);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
   function toggleTheme() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
@@ -22,6 +23,7 @@ function App() {
           theme={theme}
           onToggleTheme={toggleTheme}
           settingsVersion={settingsVersion}
+          onActiveChatChange={setActiveChatId}
         />
       </div>
       {view === "settings" && (
@@ -32,6 +34,7 @@ function App() {
           }}
           theme={theme}
           onThemeChange={setTheme}
+          activeChatId={activeChatId}
         />
       )}
     </div>

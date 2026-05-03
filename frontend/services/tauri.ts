@@ -41,6 +41,45 @@ export interface McpServer {
   env?: Record<string, string>;
 }
 
+export type DiagnosticLevel = "info" | "warn" | "error" | "fatal";
+export type DiagnosticKind =
+  | "app_lifecycle"
+  | "command_failed"
+  | "client_error"
+  | "panic"
+  | "dropped_events";
+
+export interface ClientEvent {
+  level: DiagnosticLevel;
+  kind: DiagnosticKind;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+export interface DiagnosticEvent {
+  timestamp: string;
+  level: DiagnosticLevel;
+  source: "backend" | "frontend";
+  kind: DiagnosticKind;
+  message: string;
+  context: Record<string, unknown>;
+}
+
+export interface ExportOptions {
+  includeFullEndpointUrl: boolean;
+  includeActiveChatTranscript: boolean;
+  activeChatId: string | null;
+}
+
+export interface ExportResult {
+  path: string;
+  summary: string;
+  included: {
+    fullEndpointUrl: boolean;
+    activeChatTranscript: boolean;
+  };
+}
+
 // ── Provider helpers ───────────────────────────────────────────────────────
 
 export const BUILT_IN_PROVIDERS: Array<{
@@ -100,6 +139,60 @@ export const listModels = (providerId: string): Promise<ModelInfo[]> =>
 
 export const hasApiKey = (providerId: string): Promise<boolean> =>
   invoke("has_api_key", { providerId });
+
+// ── Diagnostics ───────────────────────────────────────────────────────────
+
+export const getSessionId = (): Promise<string> => invoke("get_session_id");
+
+export const logClientEvent = (event: ClientEvent): Promise<void> =>
+  invoke("log_client_event", { event: { ...event, context: event.context ?? {} } });
+
+export const getRecentDiagnostics = (limit: number): Promise<DiagnosticEvent[]> =>
+  invoke("get_recent_diagnostics", { limit });
+
+export const getDiagnosticsSummary = (options: ExportOptions): Promise<string> =>
+  invoke("get_diagnostics_summary", { options });
+
+export const exportDiagnostics = (options: ExportOptions): Promise<ExportResult> =>
+  invoke("export_diagnostics", { options });
+
+export const revealDiagnosticsFolder = (): Promise<void> =>
+  invoke("reveal_diagnostics_folder");
+
+export const revealPath = (path: string): Promise<void> =>
+  invoke("reveal_path", { path });
+
+export const writeClipboardText = (text: string): Promise<void> =>
+  invoke("plugin:clipboard-manager|write_text", { text });
+
+export function installGlobalDiagnosticsHandlers() {
+  window.addEventListener("error", (event) => {
+    void logClientEvent({
+      level: "error",
+      kind: "client_error",
+      message: event.message || "Unhandled frontend error",
+      context: {},
+    }).catch(() => {});
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    void logClientEvent({
+      level: "error",
+      kind: "client_error",
+      message: String(event.reason ?? "Unhandled promise rejection"),
+      context: {},
+    }).catch(() => {});
+  });
+}
+
+export function logDiagnosticError(message: string, context: Record<string, unknown> = {}) {
+  void logClientEvent({
+    level: "error",
+    kind: "client_error",
+    message,
+    context,
+  }).catch(() => {});
+}
 
 // ── Chat ──────────────────────────────────────────────────────────────────
 
