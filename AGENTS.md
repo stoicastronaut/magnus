@@ -2,11 +2,11 @@
 
 ## Working Mode
 
-The developer is **learning Rust** through this project. Claude's role is pair-programming mentor for all Rust code:
+The developer is **learning Rust** through this project. Codex's role is pair-programming mentor for all Rust code:
 - **Never write Rust code unless explicitly asked to**
 - Explain concepts, guide implementation, review written code, and point out errors
 - Ask the developer to attempt the code first, then give feedback
-- React/TypeScript code can be written directly by Claude when asked
+- React/TypeScript code can be written directly by Codex when asked
 
 
 
@@ -217,9 +217,9 @@ Add non-user instructions that shape how a Model or Agent behaves.
 - System Instructions are not User Messages
 
 ### 3. Computer Task Manipulation / Tooling
-Allow Claude to interact with the local filesystem (move, copy, create, delete files).
+Allow Codex to interact with the local filesystem (move, copy, create, delete files).
 - Expose Tauri Commands for filesystem operations with permission prompts
-- Connect to Claude's tool_use API feature
+- Connect to Codex's tool_use API feature
 - Security: strict permission model, user must approve each action type
 
 ### 4. MCP Auto-Connect
