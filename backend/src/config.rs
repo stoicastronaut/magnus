@@ -47,6 +47,13 @@ pub enum Protocol {
 }
 
 impl Settings {
+    pub fn empty() -> Settings {
+        Settings {
+            default_provider_id: None,
+            providers: vec![],
+        }
+    }
+
     pub fn save(&self, app_data_dir: &Path) -> Result<(), String> {
         fs::create_dir_all(app_data_dir).map_err(|e| e.to_string())?;
         let path = app_data_dir.join("settings.json");
@@ -57,6 +64,9 @@ impl Settings {
     }
 
     pub fn load(app_data_dir: &Path) -> Result<Settings, String> {
+        if !app_data_dir.join("settings.json").exists() {
+            return Ok(Settings::empty());
+        }
         let path = app_data_dir.join("settings.json");
         let json_str = fs::read_to_string(path).map_err(|e| e.to_string())?;
         let json_pretty =
@@ -126,10 +136,12 @@ mod tests {
     }
 
     #[test]
-    fn test_load_fails_on_missing_file() {
+    fn test_load_returns_empty_settings_when_missing() {
         let dir = tempdir().unwrap();
-        let result = Settings::load(dir.path());
-        assert!(result.is_err());
+        let loaded = Settings::load(dir.path()).unwrap();
+
+        assert_eq!(loaded.default_provider_id, None);
+        assert!(loaded.providers.is_empty());
     }
 
     #[test]
