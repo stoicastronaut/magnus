@@ -4,6 +4,7 @@ import {
   BuiltInId,
   Protocol,
   ProviderConfig,
+  logDiagnosticError,
   upsertProvider,
 } from "../services/tauri";
 
@@ -65,6 +66,10 @@ export default function ProviderEditModal({ mode, onClose, onSaved }: Props) {
       onSaved(config.id, !!trimmedKey);
       onClose();
     } catch (e) {
+      logDiagnosticError("Provider save failed", {
+        provider_id: config.id,
+        error: String(e),
+      });
       setError(String(e));
     } finally {
       setSaving(false);
