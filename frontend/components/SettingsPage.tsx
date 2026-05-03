@@ -63,6 +63,29 @@ const ghostBtn = (extra?: React.CSSProperties): React.CSSProperties => ({
   cursor: "pointer", ...extra,
 });
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "0";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    if (!copied) {
+      throw new Error("Clipboard copy is not available in this context.");
+    }
+  }
+}
+
 function SectionHeader({ eyebrow, title, subtitle, right }: {
   eyebrow?: string; title: string; subtitle?: string; right?: React.ReactNode;
 }) {
@@ -719,7 +742,7 @@ function DiagnosticsSection({ activeChatId, onEventsLoaded }: { activeChatId: st
     setStatus("");
     try {
       const summary = await getDiagnosticsSummary(options());
-      await navigator.clipboard.writeText(summary);
+      await copyText(summary);
       setStatus("Summary copied.");
     } catch (err) {
       setStatus(`Copy failed: ${err}`);
@@ -748,7 +771,7 @@ function DiagnosticsSection({ activeChatId, onEventsLoaded }: { activeChatId: st
 
   async function handleCopyEvent(event: DiagnosticEvent) {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(event, null, 2));
+      await copyText(JSON.stringify(event, null, 2));
       setStatus("Error details copied.");
     } catch (err) {
       setStatus(`Copy failed: ${err}`);
