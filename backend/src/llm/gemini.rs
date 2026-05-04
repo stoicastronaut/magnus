@@ -25,11 +25,7 @@ impl GeminiClient {
     }
 
     fn to_gemini_role(role: &str) -> &str {
-        if role == "assistant" {
-            "model"
-        } else {
-            role
-        }
+        if role == "assistant" { "model" } else { role }
     }
 }
 
@@ -81,11 +77,10 @@ impl super::LlmClient for GeminiClient {
                 if let Some(token) = json["candidates"][0]["content"]["parts"]
                     [0]["text"]
                     .as_str()
+                    && !token.is_empty()
                 {
-                    if !token.is_empty() {
-                        full_text.push_str(token);
-                        app.emit("stream-token", token).unwrap();
-                    }
+                    full_text.push_str(token);
+                    app.emit("stream-token", token).unwrap();
                 }
             }
         }

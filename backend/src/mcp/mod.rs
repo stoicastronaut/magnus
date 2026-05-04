@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use tokio::sync::Mutex;
 mod client;
-pub use client::{call_tool, connect, connect_server, list_tools, McpClient};
+pub use client::{McpClient, call_tool, connect, connect_server, list_tools};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct McpServer {

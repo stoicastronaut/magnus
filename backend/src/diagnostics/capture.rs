@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use serde_json::{Map, Value};
 
 use super::{
-    append_crash_event, redact_context, redact_message, DiagnosticContext,
-    DiagnosticEvent, DiagnosticKind, DiagnosticLevel, DiagnosticSource,
-    Diagnostics,
+    DiagnosticContext, DiagnosticEvent, DiagnosticKind, DiagnosticLevel,
+    DiagnosticSource, Diagnostics, append_crash_event, redact_context,
+    redact_message,
 };
 
 #[derive(serde::Deserialize)]
@@ -174,9 +174,11 @@ mod tests {
         let value = serde_json::to_value(event).unwrap();
 
         assert_eq!(value["context"]["error"], "HTTP 400: provider_api_error");
-        assert!(!value["context"]["error"]
-            .as_str()
-            .unwrap()
-            .contains("private prompt"));
+        assert!(
+            !value["context"]["error"]
+                .as_str()
+                .unwrap()
+                .contains("private prompt")
+        );
     }
 }
