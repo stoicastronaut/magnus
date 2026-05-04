@@ -195,7 +195,7 @@ export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename
             </div>
             <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
               <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em", color: "var(--fg)" }}>Magnus</span>
-              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>purring · v0.3</span>
+              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>Purring · v0.1.0-beta</span>
             </div>
           </div>
           <button
