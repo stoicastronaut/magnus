@@ -13,6 +13,15 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./frontend/test/setup.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["frontend/**/*.{ts,tsx}"],
+      exclude: ["frontend/test/**", "frontend/**/*.d.ts", "frontend/main.tsx"],
+      reporter: ["text", "lcov"],
+      thresholds: {
+        lines: 90,
+      },
+    },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
