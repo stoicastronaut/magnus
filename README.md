@@ -59,7 +59,7 @@ macOS preview builds are currently unsigned and not notarized. macOS may show a 
 
 Requirements:
 
-- Rust `1.92.0`
+- Rust `1.95.0`
 - Node.js 22
 - pnpm `10.25.0`
 - Tauri system dependencies for your operating system

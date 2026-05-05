@@ -16,8 +16,8 @@ Small fixes, documentation improvements, and typo fixes can go straight to a pul
 
 Requirements:
 
-- Rust `1.92.0`
-- Node.js 22
+- Rust `1.95.0`
+- Node.js 25
 - pnpm `10.25.0`
 - Tauri system dependencies for your operating system
 
