@@ -4,8 +4,8 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -15,7 +15,7 @@ use super::event::{
     DiagnosticContext, DiagnosticEvent, DiagnosticKind, DiagnosticLevel,
     DiagnosticSource,
 };
-use super::retention::{prune_old_diagnostics, RetentionPolicy};
+use super::retention::{RetentionPolicy, prune_old_diagnostics};
 
 pub const MAX_RECENT_DIAGNOSTICS: u32 = 200;
 const RETENTION_SWEEP_INTERVAL: Duration = Duration::from_secs(60 * 60);
@@ -296,8 +296,7 @@ mod tests {
         let lines: Vec<_> = contents.lines().collect();
         assert_eq!(lines.len(), 1);
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(lines[0]).unwrap()
-                ["message"],
+            serde_json::from_str::<serde_json::Value>(lines[0]).unwrap()["message"],
             "settings load failed"
         );
     }
@@ -327,9 +326,11 @@ mod tests {
 
         assert_eq!(recent.len(), 200);
         assert_eq!(recent[0].message, "event 204");
-        assert!(recent
-            .iter()
-            .all(|event| event.level != DiagnosticLevel::Info));
+        assert!(
+            recent
+                .iter()
+                .all(|event| event.level != DiagnosticLevel::Info)
+        );
     }
 
     #[test]
@@ -398,9 +399,11 @@ mod tests {
         diagnostics.flush().await;
         let recent = read_recent_diagnostics(dir.path(), 10).unwrap();
 
-        assert!(recent
-            .iter()
-            .any(|event| event.message == "queued before shutdown"));
+        assert!(
+            recent
+                .iter()
+                .any(|event| event.message == "queued before shutdown")
+        );
     }
 
     #[tokio::test]

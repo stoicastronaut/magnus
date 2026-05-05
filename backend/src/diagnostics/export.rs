@@ -1,7 +1,7 @@
 use crate::chats::Chat;
 use crate::config::{ProviderType, Settings};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
@@ -9,8 +9,8 @@ use std::io::Cursor;
 use std::path::Path;
 
 use super::writer::{
-    diagnostics_dir, read_all_diagnostics, read_recent_diagnostics,
-    MAX_RECENT_DIAGNOSTICS,
+    MAX_RECENT_DIAGNOSTICS, diagnostics_dir, read_all_diagnostics,
+    read_recent_diagnostics,
 };
 
 pub const MAX_EXPORT_UNCOMPRESSED_BYTES: u64 = 10 * 1024 * 1024;
@@ -454,13 +454,17 @@ mod tests {
             .join("\n");
 
         assert!(basic_entries.iter().any(|(name, _)| name == "summary.md"));
-        assert!(basic_entries
-            .iter()
-            .any(|(name, _)| name == "environment.json"));
+        assert!(
+            basic_entries
+                .iter()
+                .any(|(name, _)| name == "environment.json")
+        );
         assert!(basic_entries.iter().any(|(name, _)| name == "events.jsonl"));
-        assert!(basic_entries
-            .iter()
-            .any(|(name, _)| name == "included.json"));
+        assert!(
+            basic_entries
+                .iter()
+                .any(|(name, _)| name == "included.json")
+        );
         assert!(basic_joined.contains("gpt-5-mini"));
         assert!(!basic_joined.contains("proxy.example.com"));
         assert!(!basic_joined.contains("Private Chat Name"));
@@ -487,9 +491,11 @@ mod tests {
         .unwrap();
         assert!(!requested_missing_chat.included.active_chat_transcript);
         assert_eq!(missing_included["activeChatTranscript"], false);
-        assert!(!missing_entries
-            .iter()
-            .any(|(name, _)| name == "active-chat.json"));
+        assert!(
+            !missing_entries
+                .iter()
+                .any(|(name, _)| name == "active-chat.json")
+        );
 
         let expanded = export_diagnostics_bundle(
             dir.path(),

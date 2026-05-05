@@ -13,11 +13,11 @@ mod models;
 mod secrets;
 
 use diagnostics::{
-    diagnostics_dir, diagnostics_summary, export_diagnostics_bundle,
-    install_panic_hook, read_recent_diagnostics, record_result, redact_context,
-    start_diagnostics, validate_reveal_path, ClientEvent, DiagnosticContext,
-    DiagnosticEvent, DiagnosticSource, Diagnostics, ExportOptions,
-    ExportResult,
+    ClientEvent, DiagnosticContext, DiagnosticEvent, DiagnosticSource,
+    Diagnostics, ExportOptions, ExportResult, diagnostics_dir,
+    diagnostics_summary, export_diagnostics_bundle, install_panic_hook,
+    read_recent_diagnostics, record_result, redact_context, start_diagnostics,
+    validate_reveal_path,
 };
 
 #[tauri::command]
@@ -49,10 +49,10 @@ fn upsert_provider(
                 default_provider_id: None,
                 providers: vec![],
             });
-        if let Some(key) = api_key {
-            if !key.is_empty() {
-                secrets::set_api_key(&provider.id, &key)?;
-            }
+        if let Some(key) = api_key
+            && !key.is_empty()
+        {
+            secrets::set_api_key(&provider.id, &key)?;
         }
         if let Some(pos) =
             settings.providers.iter().position(|p| p.id == provider.id)
@@ -664,10 +664,10 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
-        if matches!(event, tauri::RunEvent::Exit) {
-            if let Some(diagnostics) = app_handle.try_state::<Diagnostics>() {
-                tauri::async_runtime::block_on(diagnostics.flush());
-            }
+        if matches!(event, tauri::RunEvent::Exit)
+            && let Some(diagnostics) = app_handle.try_state::<Diagnostics>()
+        {
+            tauri::async_runtime::block_on(diagnostics.flush());
         }
     });
 }

@@ -1,8 +1,8 @@
 use rmcp::model::CallToolRequestParams;
 use rmcp::service::RunningService;
 use rmcp::{
-    transport::{ConfigureCommandExt, TokioChildProcess},
     ServiceExt,
+    transport::{ConfigureCommandExt, TokioChildProcess},
 };
 use thiserror::Error;
 use tokio::process::Command;

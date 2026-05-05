@@ -1042,7 +1042,7 @@ export function SettingsPage({ onBack, theme, onThemeChange, activeChatId }: Pro
           </div>
           <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
             <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>Settings</span>
-            <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>Magnus · 0.3</span>
+            <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>Magnus · 0.1.0-beta</span>
           </div>
         </div>
 
@@ -1065,7 +1065,7 @@ export function SettingsPage({ onBack, theme, onThemeChange, activeChatId }: Pro
           fontSize: 11, color: "var(--fg-3)", fontFamily: "var(--mg-mono)",
         }}>
           <span style={{ color: "var(--brand)" }}>●</span>
-          <span>purring since 2024</span>
+          <span>Purring since 2026</span>
         </div>
       </aside>
 

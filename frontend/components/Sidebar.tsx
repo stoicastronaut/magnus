@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { PawIcon, GearIcon, PlusIcon, SearchIcon } from "./icons";
+import { MagnusLogo, GearIcon, PlusIcon, SearchIcon } from "./icons";
 import { PawBullet } from "./Mascot";
 import { Chat } from "../services/tauri";
 
@@ -103,13 +103,8 @@ export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename
           transition: "width 0.22s cubic-bezier(.2,.7,.3,1)",
         }}>
           {/* Brand mark */}
-          <div style={{
-            width: 32, height: 32, borderRadius: 9,
-            background: "var(--brand)", color: "var(--on-brand)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            marginBottom: 6,
-          }}>
-            <PawIcon size={18} />
+          <div style={{ marginBottom: 6 }}>
+            <MagnusLogo size={32} />
           </div>
 
           {/* Expand chevron */}
@@ -186,16 +181,10 @@ export function Sidebar({ chats, activeChatId, onSelectChat, onNewChat, onRename
         {/* Header */}
         <div style={{ padding: "14px 14px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: "var(--brand)", color: "var(--on-brand)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <PawIcon size={15} />
-            </div>
+            <MagnusLogo size={28} />
             <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
               <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em", color: "var(--fg)" }}>Magnus</span>
-              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>purring · v0.3</span>
+              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "var(--mg-mono)" }}>Purring · v0.1.0-beta</span>
             </div>
           </div>
           <button

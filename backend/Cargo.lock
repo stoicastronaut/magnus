@@ -3,6 +3,32 @@
 version = 4
 
 [[package]]
+name = "Magnus"
+version = "0.1.0-beta"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "flate2",
+ "futures-util",
+ "keyring",
+ "regex",
+ "reqwest",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "tar",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-opener",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2319,32 +2345,6 @@ name = "mac"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
-
-[[package]]
-name = "magnus"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "flate2",
- "futures-util",
- "keyring",
- "regex",
- "reqwest",
- "rmcp",
- "serde",
- "serde_json",
- "tar",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-opener",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "url",
- "uuid",
-]
 
 [[package]]
 name = "markup5ever"

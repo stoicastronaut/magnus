@@ -139,20 +139,26 @@ mod tests {
         )
         .unwrap();
 
-        assert!(!events_file_for_date(
-            dir.path(),
-            NaiveDate::from_ymd_opt(2026, 4, 20).unwrap(),
-        )
-        .exists());
-        assert!(!events_file_for_date(
-            dir.path(),
-            NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
-        )
-        .exists());
-        assert!(events_file_for_date(
-            dir.path(),
-            NaiveDate::from_ymd_opt(2026, 5, 2).unwrap(),
-        )
-        .exists());
+        assert!(
+            !events_file_for_date(
+                dir.path(),
+                NaiveDate::from_ymd_opt(2026, 4, 20).unwrap(),
+            )
+            .exists()
+        );
+        assert!(
+            !events_file_for_date(
+                dir.path(),
+                NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            )
+            .exists()
+        );
+        assert!(
+            events_file_for_date(
+                dir.path(),
+                NaiveDate::from_ymd_opt(2026, 5, 2).unwrap(),
+            )
+            .exists()
+        );
     }
 }

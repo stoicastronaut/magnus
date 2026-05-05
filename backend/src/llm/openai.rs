@@ -72,11 +72,10 @@ impl super::LlmClient for OpenAIClient {
                 };
                 if let Some(token) =
                     json["choices"][0]["delta"]["content"].as_str()
+                    && !token.is_empty()
                 {
-                    if !token.is_empty() {
-                        full_text.push_str(token);
-                        app.emit("stream-token", token).unwrap();
-                    }
+                    full_text.push_str(token);
+                    app.emit("stream-token", token).unwrap();
                 }
             }
         }

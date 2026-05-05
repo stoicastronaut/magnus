@@ -1,3 +1,25 @@
+export function MagnusLogo({ size = 32 }: { size?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 32 32" shapeRendering="geometricPrecision">
+      <path d="M 16 0 C 7 0, 0 7, 0 16 C 0 25, 7 32, 16 32 C 25 32, 32 25, 32 16 C 32 7, 25 0, 16 0 Z" fill="#E8752C" />
+      <ellipse cx="16" cy="20" rx="10" ry="8" fill="#FBE8C8" />
+      <g transform="translate(16 17.5)">
+        <path d="M -9 -7 L -6 -12 L -3.5 -7 Z" fill="#C25812" />
+        <path d="M  9 -7 L  6 -12 L  3.5 -7 Z" fill="#C25812" />
+        <path d="M -9 -4 C -9 -8, -6 -10, 0 -10 C 6 -10, 9 -8, 9 -4 C 9.5 4, 6 8, 0 8 C -6 8, -9.5 4, -9 -4 Z" fill="#E8752C" />
+        <path d="M -2.5 -8 q 0 4, 1 6 M 0 -8 q 0 4, 0 6 M 2.5 -8 q 0 4, -1 6" stroke="#9F4A0E" strokeWidth="1.1" fill="none" strokeLinecap="round" opacity="0.7" />
+        <circle cx="-3.5" cy="-2" r="1.6" fill="#100A06" />
+        <circle cx=" 3.5" cy="-2" r="1.6" fill="#100A06" />
+        <circle cx="-3.1" cy="-2.4" r="0.5" fill="#FFFFFF" />
+        <circle cx=" 3.9" cy="-2.4" r="0.5" fill="#FFFFFF" />
+        <ellipse cx="0" cy="3" rx="3.5" ry="2.5" fill="#FBE8C8" />
+        <path d="M -1.2 1.6 C -1.2 0.6, 1.2 0.6, 1.2 1.6 C 1.2 2.6, 0 3.6, 0 3.6 C 0 3.6, -1.2 2.6, -1.2 1.6 Z" fill="#E68A78" />
+        <path d="M 0 3.6 L 0 5 M -1.5 5.6 Q 0 6.4, 1.5 5.6" stroke="#5A3520" strokeWidth="0.6" fill="none" strokeLinecap="round" />
+      </g>
+    </svg>
+  );
+}
+
 export function PawIcon({ size = 16, style }: { size?: number; style?: React.CSSProperties }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" style={style}>
