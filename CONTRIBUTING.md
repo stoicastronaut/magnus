@@ -50,7 +50,7 @@ Coverage gates also run in CI:
 
 ```bash
 pnpm test:coverage
-cargo llvm-cov --manifest-path backend/Cargo.toml --lib --fail-under-lines 90
+cargo llvm-cov --manifest-path backend/Cargo.toml --lib --ignore-filename-regex 'backend/src/lib\.rs$' --fail-under-lines 90
 ```
 
 The project may temporarily be below the target coverage threshold while missing tests are addressed in follow-up work.

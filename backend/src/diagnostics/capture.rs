@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{any::Any, path::PathBuf};
 
 use serde_json::{Map, Value};
 
@@ -83,45 +83,53 @@ pub fn record_result<T>(
 pub fn install_panic_hook(app_data_dir: PathBuf, session_id: String) {
     let previous_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        let payload = panic_info
-            .payload()
-            .downcast_ref::<&str>()
-            .copied()
-            .or_else(|| {
-                panic_info
-                    .payload()
-                    .downcast_ref::<String>()
-                    .map(String::as_str)
-            })
-            .unwrap_or("panic occurred");
-        let mut raw = Map::new();
-        raw.insert("session_id".into(), Value::String(session_id.clone()));
-        if let Some(location) = panic_info
+        let payload = panic_payload_message(panic_info.payload());
+        let location = panic_info
             .location()
-            .map(|location| format!("{}:{}", location.file(), location.line()))
-        {
-            raw.insert("location".into(), Value::String(location));
-        }
-        if let Some(thread) = std::thread::current().name() {
-            raw.insert("thread".into(), Value::String(thread.to_string()));
-        }
-        let context = DiagnosticContext(
-            redact_context(DiagnosticKind::Panic, Value::Object(raw))
-                .as_object()
-                .cloned()
-                .unwrap_or_default(),
-        );
-        let event = DiagnosticEvent::new(
-            DiagnosticLevel::Fatal,
-            DiagnosticSource::Backend,
-            DiagnosticKind::Panic,
-            payload,
-            context,
-            chrono::Utc::now(),
-        );
+            .map(|location| format!("{}:{}", location.file(), location.line()));
+        let thread = std::thread::current().name().map(str::to_string);
+        let event = panic_event(&session_id, payload, location, thread);
         let _ = append_crash_event(&app_data_dir, &event);
         previous_hook(panic_info);
     }));
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("panic occurred")
+}
+
+fn panic_event(
+    session_id: &str,
+    payload: &str,
+    location: Option<String>,
+    thread: Option<String>,
+) -> DiagnosticEvent {
+    let mut raw = Map::new();
+    raw.insert("session_id".into(), Value::String(session_id.to_string()));
+    if let Some(location) = location {
+        raw.insert("location".into(), Value::String(location));
+    }
+    if let Some(thread) = thread {
+        raw.insert("thread".into(), Value::String(thread));
+    }
+    let context = DiagnosticContext(
+        redact_context(DiagnosticKind::Panic, Value::Object(raw))
+            .as_object()
+            .cloned()
+            .unwrap_or_default(),
+    );
+    DiagnosticEvent::new(
+        DiagnosticLevel::Fatal,
+        DiagnosticSource::Backend,
+        DiagnosticKind::Panic,
+        payload,
+        context,
+        chrono::Utc::now(),
+    )
 }
 
 fn summarize_diagnostic_error(error: &str) -> String {
@@ -138,6 +146,7 @@ fn summarize_diagnostic_error(error: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::read_recent_diagnostics;
 
     #[test]
     fn command_error_event_records_command_without_private_context() {
@@ -179,6 +188,95 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("private prompt")
+        );
+    }
+
+    #[tokio::test]
+    async fn record_result_returns_ok_without_logging() {
+        let dir = tempfile::tempdir().unwrap();
+        let diagnostics =
+            crate::diagnostics::start_diagnostics(dir.path().to_path_buf(), 8);
+
+        let result = record_result(
+            &diagnostics,
+            "load_settings",
+            None,
+            None,
+            None,
+            Ok::<_, String>("settings"),
+        );
+
+        diagnostics.flush().await;
+        assert_eq!(result.unwrap(), "settings");
+        assert!(read_recent_diagnostics(dir.path(), 10).unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn record_result_logs_error_and_returns_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let diagnostics =
+            crate::diagnostics::start_diagnostics(dir.path().to_path_buf(), 8);
+
+        let result = record_result::<()>(
+            &diagnostics,
+            "stream_message",
+            Some("chat-1"),
+            Some("provider-1"),
+            Some("model-1"),
+            Err("HTTP 503 upstream unavailable with private payload"
+                .to_string()),
+        );
+
+        diagnostics.flush().await;
+        let events = read_recent_diagnostics(dir.path(), 10).unwrap();
+        let event = events
+            .iter()
+            .find(|event| event.kind == DiagnosticKind::CommandFailed)
+            .expect("command failed event");
+
+        assert_eq!(
+            result.unwrap_err(),
+            "HTTP 503 upstream unavailable with private payload"
+        );
+        assert_eq!(event.message, "stream_message failed");
+        assert_eq!(event.context.0["command_name"], "stream_message");
+        assert_eq!(event.context.0["chat_id"], "chat-1");
+        assert_eq!(event.context.0["provider_id"], "provider-1");
+        assert_eq!(event.context.0["model_id"], "model-1");
+        assert_eq!(event.context.0["error"], "HTTP 503: provider_api_error");
+    }
+
+    #[test]
+    fn panic_payload_message_supports_common_payload_shapes() {
+        let string_payload = String::from("owned panic");
+        let unknown_payload = 42_u8;
+
+        assert_eq!(panic_payload_message(&"borrowed panic"), "borrowed panic");
+        assert_eq!(panic_payload_message(&string_payload), "owned panic");
+        assert_eq!(panic_payload_message(&unknown_payload), "panic occurred");
+    }
+
+    #[test]
+    fn panic_event_records_redacted_backend_panic_context() {
+        let event = panic_event(
+            "session-1",
+            "panic with sk-abcdefghijklmnopqrstuvwxyz1234567890",
+            Some("/Users/person/project/src/main.rs:12".to_string()),
+            Some("main".to_string()),
+        );
+        let value = serde_json::to_value(event).unwrap();
+
+        assert_eq!(value["level"], "fatal");
+        assert_eq!(value["source"], "backend");
+        assert_eq!(value["kind"], "panic");
+        assert!(!value["message"].as_str().unwrap().contains("sk-"));
+        assert_eq!(value["context"]["session_id"], "session-1");
+        assert_eq!(value["context"]["thread"], "main");
+        assert!(
+            !value["context"]["location"]
+                .as_str()
+                .unwrap()
+                .contains("/Users/person")
         );
     }
 }

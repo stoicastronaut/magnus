@@ -92,3 +92,63 @@ pub fn client_for(
         } => Box::new(GeminiClient::new(base_url.clone(), api_key, http)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(_type: ProviderType) -> ProviderConfig {
+        ProviderConfig {
+            id: "provider-1".to_string(),
+            display_name: "Provider".to_string(),
+            _type,
+        }
+    }
+
+    #[test]
+    fn client_for_constructs_all_built_in_provider_clients() {
+        let http = reqwest::Client::new();
+
+        let providers = [
+            provider(ProviderType::BuiltIn {
+                which: BuiltInId::Anthropic,
+            }),
+            provider(ProviderType::BuiltIn {
+                which: BuiltInId::OpenAI,
+            }),
+            provider(ProviderType::BuiltIn {
+                which: BuiltInId::Google,
+            }),
+        ];
+
+        for provider in providers {
+            let _client =
+                client_for(&provider, "api-key".to_string(), http.clone());
+        }
+    }
+
+    #[test]
+    fn client_for_constructs_all_custom_protocol_clients() {
+        let http = reqwest::Client::new();
+
+        let providers = [
+            provider(ProviderType::Custom {
+                protocol: Protocol::Anthropic,
+                base_url: "https://anthropic.example/".to_string(),
+            }),
+            provider(ProviderType::Custom {
+                protocol: Protocol::OpenAI,
+                base_url: "https://openai.example/v1/".to_string(),
+            }),
+            provider(ProviderType::Custom {
+                protocol: Protocol::Google,
+                base_url: "https://google.example/v1beta/".to_string(),
+            }),
+        ];
+
+        for provider in providers {
+            let _client =
+                client_for(&provider, "api-key".to_string(), http.clone());
+        }
+    }
+}

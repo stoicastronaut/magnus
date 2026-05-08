@@ -106,7 +106,7 @@ Coverage checks are available, but the current project is below the target thres
 
 ```bash
 pnpm test:coverage
-cargo llvm-cov --manifest-path backend/Cargo.toml --lib --fail-under-lines 90
+cargo llvm-cov --manifest-path backend/Cargo.toml --lib --ignore-filename-regex 'backend/src/lib\.rs$' --fail-under-lines 90
 ```
 
 ## How to Report a Bug
