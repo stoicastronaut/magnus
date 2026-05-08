@@ -4,11 +4,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "../components/SettingsPage";
 import {
   deleteProvider,
+  connectServer,
+  disconnectServer,
+  getConnectedServers,
   getRecentDiagnostics,
   getSettings,
   hasApiKey,
   listModels,
+  listTools,
+  loadMcpServers,
   logDiagnosticError,
+  saveMcpServers,
   setDefaultProvider,
   upsertProvider,
 } from "../services/tauri";
@@ -25,6 +31,12 @@ vi.mock("../services/tauri", async (importOriginal) => {
     deleteProvider: vi.fn(),
     setDefaultProvider: vi.fn(),
     logDiagnosticError: vi.fn(),
+    loadMcpServers: vi.fn(),
+    saveMcpServers: vi.fn(),
+    connectServer: vi.fn(),
+    disconnectServer: vi.fn(),
+    getConnectedServers: vi.fn(),
+    listTools: vi.fn(),
   };
 });
 
@@ -56,6 +68,15 @@ const openAiModels = [
   { id: "gpt-5-mini", display_name: "GPT-5 mini" },
 ];
 
+const githubServer = {
+  name: "github",
+  display_name: "GitHub",
+  command: "npx",
+  args: ["-y", "@modelcontextprotocol/server-github"],
+  token: "ghp_test",
+  env_key: "GITHUB_TOKEN",
+};
+
 function renderSettingsPage() {
   return render(
     <SettingsPage
@@ -79,6 +100,15 @@ describe("SettingsPage", () => {
     vi.mocked(upsertProvider).mockResolvedValue(undefined);
     vi.mocked(deleteProvider).mockResolvedValue(undefined);
     vi.mocked(setDefaultProvider).mockResolvedValue(undefined);
+    vi.mocked(loadMcpServers).mockResolvedValue([]);
+    vi.mocked(saveMcpServers).mockResolvedValue(undefined);
+    vi.mocked(connectServer).mockResolvedValue(undefined);
+    vi.mocked(disconnectServer).mockResolvedValue(undefined);
+    vi.mocked(getConnectedServers).mockResolvedValue([]);
+    vi.mocked(listTools).mockResolvedValue([
+      { name: "search_repositories", description: "Search repositories" },
+      { name: "get_issue", description: "Get issue" },
+    ]);
     vi.stubGlobal("crypto", {
       ...crypto,
       randomUUID: vi.fn(() => "custom-provider-id"),
@@ -301,5 +331,88 @@ describe("SettingsPage", () => {
         "proxy-key"
       );
     });
+  });
+
+  it("loads saved MCP servers when opening the MCP section", async () => {
+    vi.mocked(loadMcpServers).mockResolvedValue([githubServer]);
+
+    renderSettingsPage();
+
+    await userEvent.click(screen.getByRole("button", { name: /mcp connections/i }));
+
+    await waitFor(() => {
+      expect(loadMcpServers).toHaveBeenCalled();
+    });
+    expect(screen.getByRole("heading", { name: "MCP Connections" })).toBeInTheDocument();
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+    expect(screen.getByText("npx -y @modelcontextprotocol/server-github")).toBeInTheDocument();
+    expect(screen.getByText("○ idle")).toBeInTheDocument();
+  });
+
+  it("adds an MCP server and persists the updated server list", async () => {
+    const { container } = renderSettingsPage();
+
+    await userEvent.click(screen.getByRole("button", { name: /mcp connections/i }));
+    await userEvent.click(screen.getByRole("button", { name: "+ Add server" }));
+    await userEvent.type(screen.getByPlaceholderText("GitHub"), "GitHub");
+    await userEvent.type(screen.getByPlaceholderText("npx"), "npx");
+    await userEvent.type(screen.getByPlaceholderText("GITHUB_TOKEN"), "GITHUB_TOKEN");
+    await userEvent.type(
+      screen.getByPlaceholderText("-y @modelcontextprotocol/server-github"),
+      "-y @modelcontextprotocol/server-github"
+    );
+    await userEvent.type(container.querySelector('input[type="password"]')!, "ghp_test");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(saveMcpServers).toHaveBeenCalledWith([githubServer]);
+    });
+    expect(screen.queryByRole("heading", { name: "Add server" })).not.toBeInTheDocument();
+  });
+
+  it("connects an MCP server, displays tools, and disconnects it", async () => {
+    vi.mocked(loadMcpServers).mockResolvedValue([githubServer]);
+
+    renderSettingsPage();
+
+    await userEvent.click(screen.getByRole("button", { name: /mcp connections/i }));
+    await waitFor(() => {
+      expect(screen.getByText("GitHub")).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => {
+      expect(connectServer).toHaveBeenCalledWith(githubServer);
+    });
+    expect(listTools).toHaveBeenCalledWith(githubServer);
+    expect(screen.getByText("● 2 tools")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByText("search_repositories")).toBeInTheDocument();
+    expect(screen.getByText("get_issue")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() => {
+      expect(disconnectServer).toHaveBeenCalledWith("github");
+    });
+    expect(screen.getByText("○ idle")).toBeInTheDocument();
+  });
+
+  it("removes an MCP server and persists the updated list", async () => {
+    vi.mocked(loadMcpServers).mockResolvedValue([githubServer]);
+
+    renderSettingsPage();
+
+    await userEvent.click(screen.getByRole("button", { name: /mcp connections/i }));
+    await waitFor(() => {
+      expect(screen.getByText("GitHub")).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    await waitFor(() => {
+      expect(saveMcpServers).toHaveBeenCalledWith([]);
+    });
+    expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
   });
 });
