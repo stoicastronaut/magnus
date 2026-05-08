@@ -174,7 +174,6 @@ impl super::LlmClient for GeminiClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn to_gemini_role_maps_assistant_to_model() {
@@ -200,8 +199,8 @@ mod tests {
         assert_eq!(
             messages_to_gemini_contents(&messages),
             vec![
-                json!({ "role": "user", "parts": [{ "text": "Hello" }] }),
-                json!({ "role": "model", "parts": [{ "text": "Hi" }] }),
+                serde_json::json!({ "role": "user", "parts": [{ "text": "Hello" }] }),
+                serde_json::json!({ "role": "model", "parts": [{ "text": "Hi" }] }),
             ]
         );
     }
@@ -216,7 +215,7 @@ mod tests {
 
         assert_eq!(
             stream_body(&messages),
-            json!({
+            serde_json::json!({
                 "contents": [{
                     "role": "user",
                     "parts": [{ "text": "Hello" }]
@@ -228,15 +227,15 @@ mod tests {
     #[test]
     fn raw_messages_to_chat_messages_accepts_block_or_string_content() {
         let raw = vec![
-            json!({
+            serde_json::json!({
                 "role": "user",
                 "content": [{ "type": "text", "text": "Block text" }]
             }),
-            json!({
+            serde_json::json!({
                 "role": "assistant",
                 "content": "String text"
             }),
-            json!({
+            serde_json::json!({
                 "role": "user",
                 "content": [{ "type": "image" }]
             }),
@@ -286,13 +285,13 @@ mod tests {
                 .contains("Explain coverage")
         );
         assert_eq!(
-            title_from_response(&json!({
+            title_from_response(&serde_json::json!({
                 "candidates": [{
                     "content": { "parts": [{ "text": "\"Gemini title\"" }] }
                 }]
             })),
             "Gemini title"
         );
-        assert_eq!(title_from_response(&json!({})), "New chat");
+        assert_eq!(title_from_response(&serde_json::json!({})), "New chat");
     }
 }

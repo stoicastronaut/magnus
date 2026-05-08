@@ -257,41 +257,42 @@ impl super::LlmClient for AnthropicClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn sse_state_accumulates_text_blocks_and_returns_tokens() {
         let mut state = SseState::new();
 
         assert_eq!(
-            state.process_event(&json!({
+            state.process_event(&serde_json::json!({
                 "type": "content_block_start",
                 "content_block": { "type": "text" }
             })),
             None
         );
         assert_eq!(
-            state.process_event(&json!({
+            state.process_event(&serde_json::json!({
                 "type": "content_block_delta",
                 "delta": { "type": "text_delta", "text": "Hello" }
             })),
             Some("Hello".to_string())
         );
         assert_eq!(
-            state.process_event(&json!({
+            state.process_event(&serde_json::json!({
                 "type": "content_block_delta",
                 "delta": { "type": "text_delta", "text": " there" }
             })),
             Some(" there".to_string())
         );
         assert_eq!(
-            state.process_event(&json!({ "type": "content_block_stop" })),
+            state.process_event(
+                &serde_json::json!({ "type": "content_block_stop" })
+            ),
             None
         );
 
         assert_eq!(
             state.content_blocks,
-            vec![json!({ "type": "text", "text": "Hello there" })]
+            vec![serde_json::json!({ "type": "text", "text": "Hello there" })]
         );
         assert!(state.tool_uses.is_empty());
     }
@@ -300,7 +301,7 @@ mod tests {
     fn sse_state_accumulates_tool_use_blocks() {
         let mut state = SseState::new();
 
-        state.process_event(&json!({
+        state.process_event(&serde_json::json!({
             "type": "content_block_start",
             "content_block": {
                 "type": "tool_use",
@@ -308,29 +309,34 @@ mod tests {
                 "name": "search"
             }
         }));
-        state.process_event(&json!({
+        state.process_event(&serde_json::json!({
             "type": "content_block_delta",
             "delta": {
                 "type": "input_json_delta",
                 "partial_json": "{\"query\":"
             }
         }));
-        state.process_event(&json!({
+        state.process_event(&serde_json::json!({
             "type": "content_block_delta",
             "delta": {
                 "type": "input_json_delta",
                 "partial_json": "\"magnus\"}"
             }
         }));
-        state.process_event(&json!({ "type": "content_block_stop" }));
+        state.process_event(
+            &serde_json::json!({ "type": "content_block_stop" }),
+        );
 
         assert_eq!(state.tool_uses.len(), 1);
         assert_eq!(state.tool_uses[0].id, "toolu_1");
         assert_eq!(state.tool_uses[0].name, "search");
-        assert_eq!(state.tool_uses[0].input, json!({ "query": "magnus" }));
+        assert_eq!(
+            state.tool_uses[0].input,
+            serde_json::json!({ "query": "magnus" })
+        );
         assert_eq!(
             state.content_blocks,
-            vec![json!({
+            vec![serde_json::json!({
                 "type": "tool_use",
                 "id": "toolu_1",
                 "name": "search",
@@ -344,21 +350,21 @@ mod tests {
         let mut state = SseState::new();
 
         assert_eq!(
-            state.process_event(&json!({
+            state.process_event(&serde_json::json!({
                 "type": "content_block_delta",
                 "delta": { "type": "text_delta", "text": "" }
             })),
             None
         );
         assert_eq!(
-            state.process_event(&json!({
+            state.process_event(&serde_json::json!({
                 "type": "content_block_delta",
                 "delta": { "type": "other_delta" }
             })),
             None
         );
         assert_eq!(
-            state.process_event(&json!({ "type": "message_stop" })),
+            state.process_event(&serde_json::json!({ "type": "message_stop" })),
             None
         );
         assert!(state.content_blocks.is_empty());
@@ -375,7 +381,7 @@ mod tests {
 
         assert_eq!(
             messages_to_anthropic(&messages),
-            vec![json!({
+            vec![serde_json::json!({
                 "role": "user",
                 "content": [{ "type": "text", "text": "Hello" }]
             })]
@@ -384,7 +390,7 @@ mod tests {
 
     #[test]
     fn stream_body_includes_tools_only_when_present() {
-        let messages = vec![json!({
+        let messages = vec![serde_json::json!({
             "role": "user",
             "content": [{ "type": "text", "text": "Hello" }]
         })];
@@ -395,9 +401,12 @@ mod tests {
         assert_eq!(without_tools["stream"], true);
         assert!(without_tools.get("tools").is_none());
 
-        let tools = vec![json!({ "name": "search" })];
+        let tools = vec![serde_json::json!({ "name": "search" })];
         let with_tools = stream_body(&messages, &tools, "claude-sonnet-4-6");
-        assert_eq!(with_tools["tools"], json!([{ "name": "search" }]));
+        assert_eq!(
+            with_tools["tools"],
+            serde_json::json!([{ "name": "search" }])
+        );
     }
 
     #[test]
@@ -420,10 +429,10 @@ mod tests {
         );
         assert_eq!(
             title_from_response(
-                &json!({ "content": [{ "text": "\"Coverage plan\"" }] })
+                &serde_json::json!({ "content": [{ "text": "\"Coverage plan\"" }] })
             ),
             "Coverage plan"
         );
-        assert_eq!(title_from_response(&json!({})), "New chat");
+        assert_eq!(title_from_response(&serde_json::json!({})), "New chat");
     }
 }

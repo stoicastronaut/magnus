@@ -168,7 +168,6 @@ impl super::LlmClient for OpenAIClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn messages_to_openai_preserves_roles_and_text_content() {
@@ -188,8 +187,8 @@ mod tests {
         assert_eq!(
             messages_to_openai(&messages),
             vec![
-                json!({ "role": "user", "content": "Hello" }),
-                json!({ "role": "assistant", "content": "Hi" }),
+                serde_json::json!({ "role": "user", "content": "Hello" }),
+                serde_json::json!({ "role": "assistant", "content": "Hi" }),
             ]
         );
     }
@@ -204,7 +203,7 @@ mod tests {
 
         assert_eq!(
             stream_body(&messages, "gpt-5"),
-            json!({
+            serde_json::json!({
                 "model": "gpt-5",
                 "stream": true,
                 "messages": [{ "role": "user", "content": "Hello" }],
@@ -215,15 +214,15 @@ mod tests {
     #[test]
     fn raw_messages_to_chat_messages_accepts_block_or_string_content() {
         let raw = vec![
-            json!({
+            serde_json::json!({
                 "role": "user",
                 "content": [{ "type": "text", "text": "Block text" }]
             }),
-            json!({
+            serde_json::json!({
                 "role": "assistant",
                 "content": "String text"
             }),
-            json!({
+            serde_json::json!({
                 "role": "user",
                 "content": [{ "type": "image" }]
             }),
@@ -275,11 +274,11 @@ mod tests {
                 .contains("Explain coverage")
         );
         assert_eq!(
-            title_from_response(&json!({
+            title_from_response(&serde_json::json!({
                 "choices": [{ "message": { "content": "\"Short title\"" } }]
             })),
             "Short title"
         );
-        assert_eq!(title_from_response(&json!({})), "New chat");
+        assert_eq!(title_from_response(&serde_json::json!({})), "New chat");
     }
 }
