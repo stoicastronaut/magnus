@@ -98,12 +98,15 @@ const diagnosticEvents = [
   },
 ];
 
-function renderSettingsPage() {
+function renderSettingsPage(
+  theme: "dark" | "light" = "dark",
+  onThemeChange = vi.fn()
+) {
   return render(
     <SettingsPage
       onBack={vi.fn()}
-      theme="dark"
-      onThemeChange={vi.fn()}
+      theme={theme}
+      onThemeChange={onThemeChange}
       activeChatId="chat-1"
     />
   );
@@ -112,6 +115,19 @@ function renderSettingsPage() {
 describe("SettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const storage: Record<string, string> = {};
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) => storage[key] ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        storage[key] = String(value);
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete storage[key];
+      }),
+      clear: vi.fn(() => {
+        for (const key of Object.keys(storage)) delete storage[key];
+      }),
+    });
     vi.mocked(getRecentDiagnostics).mockResolvedValue([]);
     vi.mocked(getDiagnosticsSummary).mockResolvedValue("diagnostics summary");
     vi.mocked(exportDiagnostics).mockResolvedValue({
@@ -358,6 +374,44 @@ describe("SettingsPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reveal diagnostics folder" }));
     expect(revealDiagnosticsFolder).toHaveBeenCalled();
+  });
+
+  it("persists appearance preferences and calls theme change", async () => {
+    const onThemeChange = vi.fn();
+    renderSettingsPage("dark", onThemeChange);
+
+    await userEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Light" }));
+    expect(onThemeChange).toHaveBeenCalledWith("light");
+
+    await userEvent.click(screen.getByRole("button", { name: "Amber" }));
+    await userEvent.click(screen.getByRole("button", { name: "Compact" }));
+    await userEvent.click(screen.getByRole("button", { name: "System" }));
+
+    expect(localStorage.getItem("mg-accent")).toBe("amber");
+    expect(localStorage.getItem("mg-density")).toBe("compact");
+    expect(localStorage.getItem("mg-font")).toBe("system");
+  });
+
+  it("persists chat behavior toggles", async () => {
+    renderSettingsPage();
+
+    await userEvent.click(screen.getByRole("button", { name: "Chat" }));
+
+    expect(screen.getByRole("heading", { name: "Chat" })).toBeInTheDocument();
+    await clickToggle("Stream responses");
+    await clickToggle("Auto-scroll while streaming");
+    await clickToggle("Purring loading state");
+    await clickToggle("Enter to send");
+    await clickToggle("Auto-rename new chats");
+
+    expect(localStorage.getItem("mg-streaming")).toBe("false");
+    expect(localStorage.getItem("mg-autoscroll")).toBe("false");
+    expect(localStorage.getItem("mg-purr")).toBe("false");
+    expect(localStorage.getItem("mg-enter-send")).toBe("false");
+    expect(localStorage.getItem("mg-auto-rename")).toBe("false");
   });
 
   it("opens an unconfigured built-in provider modal and saves it", async () => {
