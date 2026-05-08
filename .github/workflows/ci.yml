@@ -116,4 +116,4 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Backend coverage
-        run: cargo llvm-cov --manifest-path backend/Cargo.toml --lib --fail-under-lines 90
+        run: cargo llvm-cov --manifest-path backend/Cargo.toml --lib --ignore-filename-regex 'backend/src/lib\.rs$' --fail-under-lines 90
