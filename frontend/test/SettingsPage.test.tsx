@@ -79,6 +79,10 @@ describe("SettingsPage", () => {
     vi.mocked(upsertProvider).mockResolvedValue(undefined);
     vi.mocked(deleteProvider).mockResolvedValue(undefined);
     vi.mocked(setDefaultProvider).mockResolvedValue(undefined);
+    vi.stubGlobal("crypto", {
+      ...crypto,
+      randomUUID: vi.fn(() => "custom-provider-id"),
+    });
   });
 
   it("loads providers, API key status, and models for the selected provider", async () => {
@@ -225,6 +229,77 @@ describe("SettingsPage", () => {
         provider_id: "open_ai",
         error: "Error: delete failed",
       });
+    });
+  });
+
+  it("opens an unconfigured built-in provider modal and saves it", async () => {
+    renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /google/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: /google/i }));
+
+    expect(screen.getByRole("heading", { name: "Add Google" })).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("AIzaSy…"), "google-key");
+    await userEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    await waitFor(() => {
+      expect(upsertProvider).toHaveBeenCalledWith(
+        {
+          id: "google",
+          display_name: "Google",
+          kind: "built_in",
+          which: "google",
+        },
+        "google-key"
+      );
+    });
+  });
+
+  it("validates required custom provider fields", async () => {
+    renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /custom/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: /custom/i }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    expect(screen.getByText("Display name is required.")).toBeInTheDocument();
+    expect(upsertProvider).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByPlaceholderText("My Proxy"), "Corp Gateway");
+    await userEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    expect(screen.getByText("Base URL is required.")).toBeInTheDocument();
+    expect(upsertProvider).not.toHaveBeenCalled();
+  });
+
+  it("creates a custom provider with selected protocol, base URL, and API key", async () => {
+    renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /custom/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: /custom/i }));
+    await userEvent.type(screen.getByPlaceholderText("My Proxy"), "Corp Gateway");
+    await userEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    await userEvent.type(screen.getByPlaceholderText("https://…"), "https://proxy.example.com/v1/");
+    await userEvent.type(screen.getByPlaceholderText("sk-…"), "proxy-key");
+    await userEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    await waitFor(() => {
+      expect(upsertProvider).toHaveBeenCalledWith(
+        {
+          id: "custom-provider-id",
+          display_name: "Corp Gateway",
+          kind: "custom",
+          protocol: "open_ai",
+          base_url: "https://proxy.example.com/v1/",
+        },
+        "proxy-key"
+      );
     });
   });
 });
