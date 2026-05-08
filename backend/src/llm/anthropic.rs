@@ -106,6 +106,58 @@ impl AnthropicClient {
     }
 }
 
+fn messages_to_anthropic(messages: &[Message]) -> Vec<serde_json::Value> {
+    messages
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "role": m.role,
+                "content": [{ "type": "text", "text": m.content }]
+            })
+        })
+        .collect()
+}
+
+fn stream_body(
+    messages: &[serde_json::Value],
+    tools: &[serde_json::Value],
+    model_id: &str,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "model": model_id,
+        "max_tokens": 4096,
+        "stream": true,
+        "messages": messages,
+    });
+    if !tools.is_empty() {
+        body["tools"] = serde_json::json!(tools);
+    }
+    body
+}
+
+fn title_body(messages: &[Message], model_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "model": model_id,
+        "max_tokens": 64,
+        "messages": [{
+            "role": "user",
+            "content": format!(
+                "Summarize the following message in 5 to 10 words: {}",
+                messages[0].content
+            ),
+        }]
+    })
+}
+
+fn title_from_response(json: &serde_json::Value) -> String {
+    json["content"][0]["text"]
+        .as_str()
+        .unwrap_or("New chat")
+        .trim_matches('"')
+        .trim()
+        .to_string()
+}
+
 #[async_trait]
 impl super::LlmClient for AnthropicClient {
     async fn stream(
@@ -114,10 +166,7 @@ impl super::LlmClient for AnthropicClient {
         messages: &[Message],
         model_id: &str,
     ) -> Result<String, LlmError> {
-        let json_messages: Vec<serde_json::Value> = messages
-            .iter()
-            .map(|m| serde_json::json!({"role": m.role, "content": [{"type": "text", "text": m.content}]}))
-            .collect();
+        let json_messages = messages_to_anthropic(messages);
         let (blocks, _) =
             self.stream_raw(app, &json_messages, &[], model_id).await?;
         let text = blocks
@@ -134,17 +183,7 @@ impl super::LlmClient for AnthropicClient {
         messages: &[Message],
         model_id: &str,
     ) -> Result<String, LlmError> {
-        let body = serde_json::json!({
-            "model": model_id,
-            "max_tokens": 64,
-            "messages": [{
-                "role": "user",
-                "content": format!(
-                    "Summarize the following message in 5 to 10 words: {}",
-                    messages[0].content
-                ),
-            }]
-        });
+        let body = title_body(messages, model_id);
 
         let response = self
             .http
@@ -156,8 +195,7 @@ impl super::LlmClient for AnthropicClient {
             .await?;
 
         let json: serde_json::Value = response.json().await?;
-        let text = json["content"][0]["text"].as_str().unwrap_or("New chat");
-        Ok(text.trim_matches('"').trim().to_string())
+        Ok(title_from_response(&json))
     }
 
     async fn stream_raw(
@@ -167,15 +205,7 @@ impl super::LlmClient for AnthropicClient {
         tools: &[serde_json::Value],
         model_id: &str,
     ) -> Result<(Vec<serde_json::Value>, Vec<ToolUse>), LlmError> {
-        let mut body = serde_json::json!({
-            "model": model_id,
-            "max_tokens": 4096,
-            "stream": true,
-            "messages": messages,
-        });
-        if !tools.is_empty() {
-            body["tools"] = serde_json::json!(tools);
-        }
+        let body = stream_body(messages, tools, model_id);
 
         let url = format!("{}v1/messages", self.base_url);
         let response = self
@@ -221,5 +251,179 @@ impl super::LlmClient for AnthropicClient {
         }
 
         Ok((state.content_blocks, state.tool_uses))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn sse_state_accumulates_text_blocks_and_returns_tokens() {
+        let mut state = SseState::new();
+
+        assert_eq!(
+            state.process_event(&json!({
+                "type": "content_block_start",
+                "content_block": { "type": "text" }
+            })),
+            None
+        );
+        assert_eq!(
+            state.process_event(&json!({
+                "type": "content_block_delta",
+                "delta": { "type": "text_delta", "text": "Hello" }
+            })),
+            Some("Hello".to_string())
+        );
+        assert_eq!(
+            state.process_event(&json!({
+                "type": "content_block_delta",
+                "delta": { "type": "text_delta", "text": " there" }
+            })),
+            Some(" there".to_string())
+        );
+        assert_eq!(
+            state.process_event(&json!({ "type": "content_block_stop" })),
+            None
+        );
+
+        assert_eq!(
+            state.content_blocks,
+            vec![json!({ "type": "text", "text": "Hello there" })]
+        );
+        assert!(state.tool_uses.is_empty());
+    }
+
+    #[test]
+    fn sse_state_accumulates_tool_use_blocks() {
+        let mut state = SseState::new();
+
+        state.process_event(&json!({
+            "type": "content_block_start",
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "search"
+            }
+        }));
+        state.process_event(&json!({
+            "type": "content_block_delta",
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": "{\"query\":"
+            }
+        }));
+        state.process_event(&json!({
+            "type": "content_block_delta",
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": "\"magnus\"}"
+            }
+        }));
+        state.process_event(&json!({ "type": "content_block_stop" }));
+
+        assert_eq!(state.tool_uses.len(), 1);
+        assert_eq!(state.tool_uses[0].id, "toolu_1");
+        assert_eq!(state.tool_uses[0].name, "search");
+        assert_eq!(state.tool_uses[0].input, json!({ "query": "magnus" }));
+        assert_eq!(
+            state.content_blocks,
+            vec![json!({
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "search",
+                "input": { "query": "magnus" },
+            })]
+        );
+    }
+
+    #[test]
+    fn sse_state_ignores_unknown_or_empty_delta_events() {
+        let mut state = SseState::new();
+
+        assert_eq!(
+            state.process_event(&json!({
+                "type": "content_block_delta",
+                "delta": { "type": "text_delta", "text": "" }
+            })),
+            None
+        );
+        assert_eq!(
+            state.process_event(&json!({
+                "type": "content_block_delta",
+                "delta": { "type": "other_delta" }
+            })),
+            None
+        );
+        assert_eq!(
+            state.process_event(&json!({ "type": "message_stop" })),
+            None
+        );
+        assert!(state.content_blocks.is_empty());
+        assert!(state.tool_uses.is_empty());
+    }
+
+    #[test]
+    fn messages_to_anthropic_wraps_text_content_blocks() {
+        let messages = vec![Message {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+            model_id: None,
+        }];
+
+        assert_eq!(
+            messages_to_anthropic(&messages),
+            vec![json!({
+                "role": "user",
+                "content": [{ "type": "text", "text": "Hello" }]
+            })]
+        );
+    }
+
+    #[test]
+    fn stream_body_includes_tools_only_when_present() {
+        let messages = vec![json!({
+            "role": "user",
+            "content": [{ "type": "text", "text": "Hello" }]
+        })];
+        let without_tools = stream_body(&messages, &[], "claude-sonnet-4-6");
+
+        assert_eq!(without_tools["model"], "claude-sonnet-4-6");
+        assert_eq!(without_tools["max_tokens"], 4096);
+        assert_eq!(without_tools["stream"], true);
+        assert!(without_tools.get("tools").is_none());
+
+        let tools = vec![json!({ "name": "search" })];
+        let with_tools = stream_body(&messages, &tools, "claude-sonnet-4-6");
+        assert_eq!(with_tools["tools"], json!([{ "name": "search" }]));
+    }
+
+    #[test]
+    fn title_body_and_title_response_use_expected_anthropic_shape() {
+        let messages = vec![Message {
+            role: "user".to_string(),
+            content: "Explain coverage".to_string(),
+            model_id: None,
+        }];
+        let body = title_body(&messages, "claude-sonnet-4-6");
+
+        assert_eq!(body["model"], "claude-sonnet-4-6");
+        assert_eq!(body["max_tokens"], 64);
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert!(
+            body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains("Explain coverage")
+        );
+        assert_eq!(
+            title_from_response(
+                &json!({ "content": [{ "text": "\"Coverage plan\"" }] })
+            ),
+            "Coverage plan"
+        );
+        assert_eq!(title_from_response(&json!({})), "New chat");
     }
 }
