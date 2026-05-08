@@ -6,7 +6,9 @@ import {
   deleteProvider,
   connectServer,
   disconnectServer,
+  exportDiagnostics,
   getConnectedServers,
+  getDiagnosticsSummary,
   getRecentDiagnostics,
   getSettings,
   hasApiKey,
@@ -14,9 +16,12 @@ import {
   listTools,
   loadMcpServers,
   logDiagnosticError,
+  revealDiagnosticsFolder,
+  revealPath,
   saveMcpServers,
   setDefaultProvider,
   upsertProvider,
+  writeClipboardText,
 } from "../services/tauri";
 
 vi.mock("../services/tauri", async (importOriginal) => {
@@ -24,6 +29,11 @@ vi.mock("../services/tauri", async (importOriginal) => {
   return {
     ...actual,
     getRecentDiagnostics: vi.fn(),
+    getDiagnosticsSummary: vi.fn(),
+    exportDiagnostics: vi.fn(),
+    revealDiagnosticsFolder: vi.fn(),
+    revealPath: vi.fn(),
+    writeClipboardText: vi.fn(),
     getSettings: vi.fn(),
     hasApiKey: vi.fn(),
     listModels: vi.fn(),
@@ -77,6 +87,17 @@ const githubServer = {
   env_key: "GITHUB_TOKEN",
 };
 
+const diagnosticEvents = [
+  {
+    timestamp: "2026-05-08T09:00:00.000Z",
+    level: "error" as const,
+    source: "backend" as const,
+    kind: "command_failed" as const,
+    message: "Provider request failed",
+    context: { provider_id: "anthropic", status: 500 },
+  },
+];
+
 function renderSettingsPage() {
   return render(
     <SettingsPage
@@ -92,6 +113,18 @@ describe("SettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getRecentDiagnostics).mockResolvedValue([]);
+    vi.mocked(getDiagnosticsSummary).mockResolvedValue("diagnostics summary");
+    vi.mocked(exportDiagnostics).mockResolvedValue({
+      path: "/tmp/magnus-diagnostics.zip",
+      summary: "exported",
+      included: {
+        fullEndpointUrl: true,
+        activeChatTranscript: true,
+      },
+    });
+    vi.mocked(revealDiagnosticsFolder).mockResolvedValue(undefined);
+    vi.mocked(revealPath).mockResolvedValue(undefined);
+    vi.mocked(writeClipboardText).mockResolvedValue(undefined);
     vi.mocked(getSettings).mockResolvedValue(settings);
     vi.mocked(hasApiKey).mockImplementation(async (providerId) => providerId === "anthropic");
     vi.mocked(listModels).mockImplementation(async (providerId) =>
@@ -258,8 +291,73 @@ describe("SettingsPage", () => {
       expect(logDiagnosticError).toHaveBeenCalledWith("Provider delete failed", {
         provider_id: "open_ai",
         error: "Error: delete failed",
+    });
+  });
+  });
+
+  async function clickToggle(label: string) {
+    const row = screen.getByText(label).closest("div")?.parentElement?.parentElement;
+    const button = row?.querySelector("button");
+    if (!button) throw new Error(`Toggle not found for ${label}`);
+    await userEvent.click(button);
+  }
+
+  it("loads diagnostics, copies event details, exports, and reveals files", async () => {
+    vi.mocked(getRecentDiagnostics).mockResolvedValue(diagnosticEvents);
+
+    renderSettingsPage();
+
+    await userEvent.click(screen.getByRole("button", { name: /diagnostics/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeInTheDocument();
+    });
+    expect(getRecentDiagnostics).toHaveBeenCalledWith(200);
+    expect(screen.getByText("Provider request failed")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByText(/provider_id/)).toBeInTheDocument();
+    expect(screen.getByText(/anthropic/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => {
+      expect(writeClipboardText).toHaveBeenCalledWith(
+        JSON.stringify(diagnosticEvents[0], null, 2)
+      );
+    });
+    expect(screen.getByText("Error details copied.")).toBeInTheDocument();
+
+    await clickToggle("Include full endpoint URL");
+    await clickToggle("Include current chat transcript");
+    await userEvent.click(screen.getByRole("button", { name: "Copy summary" }));
+
+    await waitFor(() => {
+      expect(getDiagnosticsSummary).toHaveBeenCalledWith({
+        includeFullEndpointUrl: true,
+        includeActiveChatTranscript: true,
+        activeChatId: "chat-1",
       });
     });
+    expect(writeClipboardText).toHaveBeenCalledWith("diagnostics summary");
+    expect(screen.getByText("Summary copied.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Export diagnostics" }));
+
+    await waitFor(() => {
+      expect(exportDiagnostics).toHaveBeenCalledWith({
+        includeFullEndpointUrl: true,
+        includeActiveChatTranscript: true,
+        activeChatId: "chat-1",
+      });
+    });
+    expect(revealPath).toHaveBeenCalledWith("/tmp/magnus-diagnostics.zip");
+    expect(screen.getByText("Diagnostics exported.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Reveal exported file" }));
+    expect(revealPath).toHaveBeenCalledWith("/tmp/magnus-diagnostics.zip");
+
+    await userEvent.click(screen.getByRole("button", { name: "Reveal diagnostics folder" }));
+    expect(revealDiagnosticsFolder).toHaveBeenCalled();
   });
 
   it("opens an unconfigured built-in provider modal and saves it", async () => {
